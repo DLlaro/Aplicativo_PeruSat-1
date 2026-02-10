@@ -1,0 +1,12 @@
+# .gitignore
+__pycache__/
+*.py[cod]
+venv/
+.env
+.vscode/
+data/
+*.tif
+*.tiff
+dist/
+build/
+*.spec
