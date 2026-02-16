@@ -68,7 +68,7 @@ class SatelliteLoader:
             band = data[i].astype(np.float32)
             
             # Máscara de datos válidos para ESTA banda
-            valid_mask = band > 0
+            valid_mask = (band > 0) & (band < 4095)
             
             if valid_mask.any():
                 # Calcular percentiles SOLO de esta banda
@@ -157,10 +157,16 @@ class SatelliteLoader:
         Returns:
             tuple: (real_x, real_y, real_w, real_h)
         """
-        vertices = layer.data[-1]
-        y_min, x_min = np.min(vertices, axis=0) 
-        y_max, x_max = np.max(vertices, axis=0)
+        shape_data = layer.data[-1]
+        shape_data = np.array(shape_data)
 
+         # shape_data tiene forma (n_vertices, 2) donde cada fila es [y, x]
+        y_coords = shape_data[:, 0]
+        x_coords = shape_data[:, 1]
+        
+        y_min, y_max = y_coords.min(), y_coords.max()
+        x_min, x_max = x_coords.min(), x_coords.max()
+        
         real_x = int(x_min / self.scale_factor)
         real_y = int(y_min / self.scale_factor)
         real_w = int((x_max - x_min) / self.scale_factor)
@@ -195,17 +201,18 @@ class SatelliteLoader:
         
         # 2. Verificar que el ROI esté dentro de los límites de la imagen
         img_height, img_width = self.original_shape
-        
-        # Esquina superior izquierda fuera de límites
+
+        # Verificar que las coordenadas sean válidas
         if real_x < 0 or real_y < 0:
-            return (False, "El ROI está fuera del límite izquierdo/superior de la imagen")
-        
-        # Esquina inferior derecha fuera de límites
-        if real_x + real_w > img_width or real_y + real_h > img_height:
-            return (False, "El ROI está fuera del límite derecho/inferior de la imagen")
-        
-        # 3. Verificar que no esté completamente fuera
+            return (False, f"Coordenadas negativas: x={real_x}, y={real_y}")
+
         if real_x >= img_width or real_y >= img_height:
-            return (False, "El ROI está completamente fuera de la imagen")
+            return (False, f"ROI fuera de imagen: inicio ({real_x},{real_y}) vs límites ({img_width},{img_height})")
+
+        if real_x + real_w > img_width or real_y + real_h > img_height:
+            return (False, f"ROI excede límites: fin ({real_x+real_w},{real_y+real_h}) vs límites ({img_width},{img_height})")
+
+        if real_w <= 0 or real_h <= 0:
+            return (False, f"Dimensiones inválidas: ancho={real_w}, alto={real_h}")
         
-        return (True, "")
+        return (True, f"{area_km2:.2f}")

@@ -3,7 +3,7 @@ from pyproj import Transformer
 from logic.image_loader import SatelliteLoader
 
 class ROIManager:
-    def __init__(self, viewer_model, loader, onToggleCallback= None):
+    def __init__(self, viewer_model, loader, onToggleCallback= None, onDataChanged = None):
         """
         Maneja la logica de dibujo para la región de interés (ROI)
 
@@ -16,6 +16,7 @@ class ROIManager:
         self.layer = None # Capa de formas
         self._updating = False
         self.on_toggle_callback = onToggleCallback
+        self.on_data_changed_callback = onDataChanged # Guardamos el callback
         self.isActivated = False
 
     def activar_herramienta(self):
@@ -38,9 +39,10 @@ class ROIManager:
                 )
                 #conectar evento de cambio de datos
                 self.layer.events.data.connect(self._forzar_unico)
+                self.layer.events.data.connect(self._internal_callback)
             else:
                 self.layer = self.viewer.layers['ROI']
-            
+
             #2. Poner en modo rectángulo
             self.layer.mode = 'add_rectangle'
             self.viewer.cursor.style = 'crosshair'
@@ -64,12 +66,19 @@ class ROIManager:
                 self.layer.data = self.layer.data[-1:]
             finally:
                 self._updating = False 
+                
+    def _internal_callback(self, event):
+        if self.on_data_changed_callback:
+            # Avisamos a la MainWindow que algo cambió
+            self.on_data_changed_callback(len(self.layer.data) > 0)
     
     def limpiar(self):
         """Borrar el ROI actual"""
         if 'ROI' in self.viewer.layers:
             self.viewer.layers.remove('ROI')
             self.layer = None
+        if self.on_data_changed_callback:
+            self.on_data_changed_callback(False)
 
     def obtener_coordenadas_roi(self) -> tuple[float, float, float, float]:
         """
