@@ -1,18 +1,21 @@
 import numpy as np
 from pyproj import Transformer
-from logic.image_loader import SatelliteLoader
+from constants import (PIXEL_SIZE_PERU_SAT, 
+                       ROI_EDGE_COLOR, 
+                       ROI_EDGE_WIDTH,
+                       ROI_FACE_COLOR, 
+                       MSG_ROI_ACTIVE, 
+                       MSG_ROI_READY)
 
 class ROIManager:
-    def __init__(self, viewer_model, loader, onToggleCallback= None, onDataChanged = None):
+    def __init__(self, viewer_model, onToggleCallback= None, onDataChanged = None):
         """
         Maneja la logica de dibujo para la región de interés (ROI)
 
         Args:       
             viewer_model: modelo de Napari (para añadir capas)
-            loader: image_loader (saber escala real)
         """
         self.viewer = viewer_model
-        self.loader = loader
         self.layer = None # Capa de formas
         self._updating = False
         self.on_toggle_callback = onToggleCallback
@@ -20,78 +23,149 @@ class ROIManager:
         self.isActivated = False
 
     def activar_herramienta(self):
-        """Preparar el visor para dibujar"""
-        #1. Crear capa si no existe
+        """Toggle ROI drawing mode"""
         self.isActivated = not self.isActivated
 
-        # Si existe la función de aviso, la ejecutamos
+        # Notify UI of toggle state
         if self.on_toggle_callback:
             self.on_toggle_callback(self.isActivated)
 
         if self.isActivated:
-            if 'ROI' not in self.viewer.layers:
-                self.layer = self.viewer.add_shapes(
-                    name = 'ROI',
-                    edge_color = 'red',
-                    face_color = [1, 0, 0, 0.2],
-                    edge_width = 2,
-                    ndim = 2
-                )
-                #conectar evento de cambio de datos
-                self.layer.events.data.connect(self._forzar_unico)
-                self.layer.events.data.connect(self._internal_callback)
-            else:
-                self.layer = self.viewer.layers['ROI']
+            self._activar_modo_dibujo()
+        else:
+            self._desactivar_modo_dibujo()
 
-            #2. Poner en modo rectángulo
-            self.layer.mode = 'add_rectangle'
-            self.viewer.cursor.style = 'crosshair'
+    def _activar_modo_dibujo(self):
+        """Enter drawing mode"""
+        # Create layer if it doesn't exist
+        if 'ROI' not in self.viewer.layers:
+            self.layer = self.viewer.add_shapes(
+                name='ROI',
+                edge_color=ROI_EDGE_COLOR,
+                face_color=ROI_FACE_COLOR,
+                edge_width=ROI_EDGE_WIDTH,
+                ndim=2
+            )
+            # Connect events
+            self.layer.events.data.connect(self._on_data_changed)
+        else:
+            self.layer = self.viewer.layers['ROI']
 
-            #3. Seleccionar capa
-            self.viewer.layers.selection.active = self.layer
-        else: 
-            self.viewer.cursor.style = 'standard'
+        # Set drawing mode
+        self.layer.mode = 'add_rectangle'
+        self.viewer.cursor.style = 'crosshair'
+        self.viewer.layers.selection.active = self.layer
 
-            self.limpiar()
+    def _desactivar_modo_dibujo(self):
+        """Exit drawing mode"""
+        self.viewer.cursor.style = 'standard'
+        self.viewer.layers.selection.clear()
+
+    def _on_data_changed(self, event):
+        """Handle shape data changes"""
+        if self.layer is None or self._updating:
             return
 
-    def _forzar_unico(self, event):
-        """Si hay mas de un rectangulo, borra el anterior"""
-        if self.layer is None or self._updating: return
-
+        # Keep only the most recent rectangle
         if len(self.layer.data) > 1:
             self._updating = True
             try:
-                #Mantener solo el último
                 self.layer.data = self.layer.data[-1:]
             finally:
-                self._updating = False 
-                
-    def _internal_callback(self, event):
+                self._updating = False
+
+        # Notify MainWindow about data state
         if self.on_data_changed_callback:
-            # Avisamos a la MainWindow que algo cambió
             self.on_data_changed_callback(len(self.layer.data) > 0)
-    
+
     def limpiar(self):
-        """Borrar el ROI actual"""
+        """Clear ROI and reset state"""
+        # Disconnect events before removing to avoid callbacks during cleanup
+        if self.layer is not None:
+            try:
+                self.layer.events.data.disconnect(self._on_data_changed)
+            except (ValueError, RuntimeError):
+                pass  # Already disconnected
+
+        # Remove layer
         if 'ROI' in self.viewer.layers:
             self.viewer.layers.remove('ROI')
-            self.layer = None
+        
+        self.layer = None
+        self.isActivated = False
+
+        # Notify callbacks AFTER cleanup is complete
         if self.on_data_changed_callback:
             self.on_data_changed_callback(False)
+        if self.on_toggle_callback:
+            self.on_toggle_callback(False)
+    
+    def tiene_datos(self) -> bool:
+        """Check if ROI has valid data"""
+        return self.layer is not None and len(self.layer.data) > 0
 
-    def obtener_coordenadas_roi(self) -> tuple[float, float, float, float]:
+    def rectangle_to_coords(self, layer, scale_factor) -> tuple[float, float, float, float]:
         """
-        Obtiene las coordenadas del ROI desde el cursor y la capa de shapes.
+        Extrae las coordenadas y dimensiones reales del ROI desde la capa.
+        
+        Args:
+            layer: Capa de shapes de Napari
         
         Returns:
-            tuple: (w, h, lat, lon) o None si no hay ROI válido
+            tuple: (real_x, real_y, real_w, real_h)
         """
-        x, y, w, h = self.loader.extraer_roi_real(
-            self.roi_manager.layer
-        )
+        shape_data = layer.data[-1]
+        shape_data = np.array(shape_data)
 
-        if w is None:
-            return None
+        # shape_data tiene forma (n_vertices, 2) donde cada fila es [y, x]
+        y_coords = shape_data[:, 0]
+        x_coords = shape_data[:, 1]
         
-        return (x, y, w, h)
+        y_min, y_max = y_coords.min(), y_coords.max()
+        x_min, x_max = x_coords.min(), x_coords.max()
+        
+        real_x = int(x_min / scale_factor)
+        real_y = int(y_min / scale_factor)
+        real_w = int((x_max - x_min) / scale_factor)
+        real_h = int((y_max - y_min) / scale_factor)
+        
+        return (real_x, real_y, real_w, real_h)
+    
+    def validar_roi(self, real_x, real_y, real_w, real_h, min_area_km2=10, original_shape = None):
+        """
+        Valida que el ROI sea válido para análisis.
+        
+        Args:
+            real_x: Coordenada X de la esquina superior izquierda
+            real_y: Coordenada Y de la esquina superior izquierda
+            real_w: Ancho del ROI en píxeles
+            real_h: Alto del ROI en píxeles
+            min_area: Área mínima requerida en píxeles cuadrados
+            
+        Returns:
+            tuple: (es_valido: bool, mensaje_error: str)
+        """
+
+        # Área en kilómetros cuadrados (1 km2 = 1,000,000 m2)
+        area_m2 = real_w * real_h* PIXEL_SIZE_PERU_SAT**2
+        area_km2 = area_m2 / 1_000_000 
+        
+        if area_km2 < min_area_km2 :
+            return (False, f"El ROI es demasiado pequeño ({area_km2:.2f} km²). "
+                    f"Área mínima requerida: {min_area_km2:.2f} km²")
+        
+        # 2. Verificar que el ROI esté dentro de los límites de la imagen
+        img_height, img_width = original_shape
+
+        # Verificar que las coordenadas sean válidas
+
+        if real_x >= img_width or real_y >= img_height:
+            return (False, f"ROI fuera de imagen: inicio ({real_x},{real_y}) vs límites ({img_width},{img_height})")
+
+        if real_x + real_w > img_width or real_y + real_h > img_height:
+            return (False, f"ROI excede límites: fin ({real_x+real_w},{real_y+real_h}) vs límites ({img_width},{img_height})")
+
+        if real_w <= 0 or real_h <= 0:
+            return (False, f"Dimensiones inválidas: ancho={real_w}, alto={real_h}")
+        
+        return (True, f"{area_km2:.2f}")

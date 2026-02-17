@@ -1,8 +1,10 @@
 from PySide6.QtWidgets import (QDialog, QHBoxLayout, QVBoxLayout, QDialogButtonBox, QLabel, QLineEdit, QPushButton, QStyle)
 
+AREA_LIMITE = 20
+
 class AnalyzeDialog(QDialog):
-    def __init__(self, area: str,callback=None):
-        super().__init__()
+    def __init__(self, parent, area: str,callback=None):
+        super().__init__(parent)
 
         self.setWindowTitle("Configuración de Analisis")
         self.resize(450, 90)
@@ -36,20 +38,20 @@ class AnalyzeDialog(QDialog):
         area_lb = QLabel(f"Área a analizar: {area:.2f} km².")
         main_layout.addWidget(area_lb)
 
-        if(area > 15):
-            mensaje = f"\n Advertencia: Extensión grande, puede tardar más tiempo del esperado."
+        if(area > AREA_LIMITE):
+            mensaje = f"\nAdvertencia: Extensión grande, puede tardar más tiempo del esperado."
             content_layout = QHBoxLayout()
 
             # Ícono
             icon_label = QLabel()
             icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
-            icon_label.setPixmap(icon.pixmap(18, 18))
-            content_layout.addWidget(icon_label, 3)
+            icon_label.setPixmap(icon.pixmap(20, 20))
+            content_layout.addWidget(icon_label, 1)
 
             # Mensaje
             message_label = QLabel(mensaje)
             message_label.setWordWrap(True)
-            content_layout.addWidget(message_label, 7)
+            content_layout.addWidget(message_label, 9)
 
             # Agregar al layout principal
             main_layout.addLayout(content_layout)

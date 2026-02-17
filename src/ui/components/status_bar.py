@@ -1,0 +1,52 @@
+from PySide6.QtWidgets import (QLabel, QProgressBar, QStatusBar)
+
+class StatusBarManager:
+    def __init__(self, status_bar: QStatusBar):
+        self.bar = status_bar
+        self.lbl_coords = QLabel("Coords: - , -")
+        self.lbl_coords_lat_lon = QLabel(" - , -")
+
+        self.progressLabel = QLabel("")
+        self.progress = QProgressBar()
+        self.progress.setMaximumHeight(15)
+        self.progress.setMaximumWidth(150)
+
+        self._setup()
+
+    def _setup(self):
+        self.bar.addPermanentWidget(self.lbl_coords)
+        self.bar.addPermanentWidget(self.lbl_coords_lat_lon)
+
+        self.bar.addPermanentWidget(self.progressLabel)
+        self.bar.addPermanentWidget(self.progress)
+
+        self.progressLabel.hide()
+        self.progress.hide()
+        
+
+    def update_coords(self, x_geo, y_geo, lat, lon):
+        self.lbl_coords.setText(f" E: {x_geo:.2f}, N: {y_geo:.2f}")
+        self.lbl_coords_lat_lon.setText(f" Lat: {lat:.6f}, Lon: {lon:.6f}")
+
+    def update_roi_area(self, dx, dy, area_km2):
+        self.lbl_coords.setText(f"ROI: {dx:.1f} x {dy:.1f} m | {area_km2:.4f} km²")
+
+    def show_message(self, msg, timeout=0):
+        self.bar.showMessage(msg, timeout)
+
+    def clear_message(self):
+        self.bar.clearMessage()
+
+    def show_progress(self):
+        self.progressLabel.show()
+        self.progress.show()
+        self.progress.setRange(0, 100)
+
+    def hide_progress(self):
+        self.progressLabel.hide()
+        self.progress.hide()
+    
+    def update_progress(self, value: int, label: str = None):
+        self.progress.setValue(value)
+        if label:
+            self.progressLabel.setText(label)

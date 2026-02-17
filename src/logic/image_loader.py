@@ -1,8 +1,6 @@
 import rasterio
 from rasterio.enums import Resampling
 import numpy as np
-from pyproj import Transformer
-from rasterio import windows
 
 class SatelliteLoader:
     def __init__(self):
@@ -97,122 +95,9 @@ class SatelliteLoader:
             if progress_callback:
                 # Calculamos el porcentaje basado en la banda actual
                 valor = int(((i + 1) / data.shape[0]) * 100)
-                progress_callback(valor)
+                progress_callback(valor, i)
 
         # 3. Transponer al final para Napari: (Bandas, Y, X) -> (Y, X, Bandas)
         img_final = np.transpose(normalized_bands, (1, 2, 0))
         
         return img_final
-    
-    def cursor_to_coords(self, x_napari: float, y_napari: float) -> tuple[float, float, float, float]:
-        """
-        Convierte coordenadas del cursor en Napari a coordenadas reales UTM y Lat/Lon.
-
-        Args:
-            x_napari: Coordenada x de la posición del cursor
-            y_napari: Coordenada y de la posición del cursor
-            
-        Returns:
-            tuple: (real_x, real_y, lat, lon)
-        """
-        real_x = x_napari / self.scale_factor
-        real_y = y_napari / self.scale_factor
-
-        # Convertir píxeles a coordenadas geográficas
-        lat, lon = self._pixel_to_latlon(real_x, real_y)
-
-        return (real_x, real_y, lat, lon)
-    
-    def _pixel_to_latlon(self, pixel_x: float, pixel_y: float) -> tuple[float, float]:
-        """
-        Convierte coordenadas de píxel a latitud/longitud.
-        
-        Args:
-            pixel_x: Coordenada X en píxeles (imagen original)
-            pixel_y: Coordenada Y en píxeles (imagen original)
-        
-        Returns:
-            tuple: (lat, lon)
-        """
-        # Aplicar transformación afín del GeoTIFF
-        x_geo, y_geo = self.transform * (pixel_x, pixel_y)
-        
-        # Reproyectar a WGS84 (Lat/Lon)
-        transformer = Transformer.from_crs(
-            self.crs, 
-            "EPSG:4326", 
-            always_xy=True
-        )
-        lon, lat = transformer.transform(x_geo, y_geo)
-        
-        return (lat, lon)
-
-    def roi_to_coords(self, layer) -> tuple[float, float, float, float]:
-        """
-        Extrae las coordenadas y dimensiones reales del ROI desde la capa.
-        
-        Args:
-            layer: Capa de shapes de Napari
-        
-        Returns:
-            tuple: (real_x, real_y, real_w, real_h)
-        """
-        shape_data = layer.data[-1]
-        shape_data = np.array(shape_data)
-
-         # shape_data tiene forma (n_vertices, 2) donde cada fila es [y, x]
-        y_coords = shape_data[:, 0]
-        x_coords = shape_data[:, 1]
-        
-        y_min, y_max = y_coords.min(), y_coords.max()
-        x_min, x_max = x_coords.min(), x_coords.max()
-        
-        real_x = int(x_min / self.scale_factor)
-        real_y = int(y_min / self.scale_factor)
-        real_w = int((x_max - x_min) / self.scale_factor)
-        real_h = int((y_max - y_min) / self.scale_factor)
-        
-        return (real_x, real_y, real_w, real_h)
-    
-    def validar_roi(self, real_x, real_y, real_w, real_h, min_area_km2=10):
-        """
-        Valida que el ROI sea válido para análisis.
-        
-        Args:
-            real_x: Coordenada X de la esquina superior izquierda
-            real_y: Coordenada Y de la esquina superior izquierda
-            real_w: Ancho del ROI en píxeles
-            real_h: Alto del ROI en píxeles
-            min_area: Área mínima requerida en píxeles cuadrados
-            
-        Returns:
-            tuple: (es_valido: bool, mensaje_error: str)
-        """
-        # 1. Verificar área mínima
-        RES_IMAGEN = 0.7 #0.7 metros
-
-        # Área en kilómetros cuadrados (1 km2 = 1,000,000 m2)
-        area_m2 = real_w * real_h* RES_IMAGEN**2
-        area_km2 = area_m2 / 1_000_000 
-        
-        if area_km2 < min_area_km2 :
-            return (False, f"El ROI es demasiado pequeño ({area_km2:.2f} km²). "
-                    f"Área mínima requerida: {min_area_km2:.2f} km²")
-        
-        # 2. Verificar que el ROI esté dentro de los límites de la imagen
-        img_height, img_width = self.original_shape
-
-        # Verificar que las coordenadas sean válidas
-        if real_x < 0 or real_y < 0:
-            return (False, f"Coordenadas negativas: x={real_x}, y={real_y}")
-
-        if real_x >= img_width or real_y >= img_height:
-            return (False, f"ROI fuera de imagen: inicio ({real_x},{real_y}) vs límites ({img_width},{img_height})")
-
-        if real_x + real_w > img_width or real_y + real_h > img_height:
-            return (False, f"ROI excede límites: fin ({real_x+real_w},{real_y+real_h}) vs límites ({img_width},{img_height})")
-
-        if real_w <= 0 or real_h <= 0:
-            return (False, f"Dimensiones inválidas: ancho={real_w}, alto={real_h}")
-        
-        return (True, f"{area_km2:.2f}")
