@@ -21,6 +21,7 @@ class ROIManager:
         self.on_toggle_callback = onToggleCallback
         self.on_data_changed_callback = onDataChanged # Guardamos el callback
         self.isActivated = False
+        self.area_km2 = 0.0
 
     def activar_herramienta(self):
         """Toggle ROI drawing mode"""
@@ -148,10 +149,10 @@ class ROIManager:
 
         # Área en kilómetros cuadrados (1 km2 = 1,000,000 m2)
         area_m2 = real_w * real_h* PIXEL_SIZE_PERU_SAT**2
-        area_km2 = area_m2 / 1_000_000 
+        self.area_km2 = area_m2 / 1_000_000 
         
-        if area_km2 < min_area_km2 :
-            return (False, f"El ROI es demasiado pequeño ({area_km2:.2f} km²). "
+        if self.area_km2 < min_area_km2 :
+            return (False, f"El ROI es demasiado pequeño ({self.area_km2:.2f} km²). "
                     f"Área mínima requerida: {min_area_km2:.2f} km²")
         
         # 2. Verificar que el ROI esté dentro de los límites de la imagen
@@ -168,4 +169,4 @@ class ROIManager:
         if real_w <= 0 or real_h <= 0:
             return (False, f"Dimensiones inválidas: ancho={real_w}, alto={real_h}")
         
-        return (True, f"{area_km2:.2f}")
+        return (True, f"{self.area_km2:.2f}")
