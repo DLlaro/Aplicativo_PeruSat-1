@@ -243,22 +243,49 @@ class MainWindow(QMainWindow):
         """
         try:
             x, y, w, h = self.roi_manager.rectangle_to_coords(
-                layer=self.roi_manager.layer,
+                layer = self.roi_manager.layer,
                 scale_factor = self.loader.scale_factor
             )
 
             # Validar ROI
-            es_valido, mensaje = self.roi_manager.validar_roi(x, y, w, h, min_area_km2 = MIN_AREA_KM2, original_shape = self.loader.original_shape)
-            if not es_valido:
-                QMessageBox.warning(
-                    self,
-                    "ROI Inválido",
-                    mensaje
-                )
-                self.status_mgr.show_message("ROI inválido - ajusta la selección")
-                return None
+            es_valido, mensaje = self.roi_manager.validar_roi(
+                x, y, w, h, 
+                min_area_km2 = MIN_AREA_KM2, 
+                original_shape = self.loader.original_shape
+            )
 
-            analyze_dlg = AnalyzeDialog(self, mensaje, lambda: self.select_directory(ruta_inicial=self.loader.path))
+            if not es_valido:
+                if "pequeño" in mensaje:
+                    # ROI pequeño → ofrecer continuar de todas formas
+                    msgBox = QMessageBox(self)
+                    msgBox.setIcon(QMessageBox.Icon.Warning)
+                    msgBox.setWindowTitle("ROI Pequeño")
+                    msgBox.setText(mensaje)
+                    
+                    # Botones estándar
+                    msgBox.setStandardButtons(QMessageBox.StandardButton.Cancel)
+                    
+                    # botón personalizado
+                    btn_continuar = msgBox.addButton("Continuar de todas formas", QMessageBox.ButtonRole.AcceptRole)
+                    
+                    result = msgBox.exec()
+                    
+                    # Verificar qué botón se presionó
+                    if msgBox.clickedButton() == btn_continuar:
+                        print("Continuar con ROI pequeño")
+                        # Continuar con el análisis
+                    else:
+                        # cancelar análisis
+                        self.status_mgr.show_message("Operación cancelada")
+                        return None
+                
+                else:
+                    # Otros errores de validación → solo advertencia
+                    QMessageBox.warning(self, "ROI Inválido", mensaje)
+                    self.status_mgr.show_message("ROI inválido - ajusta la selección")
+                    return None
+
+            analyze_dlg = AnalyzeDialog(self, self.roi_manager.area_km2, lambda: self.select_directory(ruta_inicial=self.loader.path))
             ok = analyze_dlg.exec()
             
             if ok:
