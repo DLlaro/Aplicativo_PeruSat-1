@@ -6,8 +6,8 @@ import os
 # Importar la logica
 from logic.image_loader import SatelliteLoader
 from ui.roi_manager import ROIManager
-from ui.analyze_dialog import AnalyzeDialog
-from ui.load_dialog import LoadDialog
+from ui.dialogs.analyze_dialog import AnalyzeDialog
+from ui.dialogs.load_dialog import LoadDialog
 from logic.load_worker import LoadWorker
 
 from ui.components.viewer_panel import ViewerPanel
@@ -103,6 +103,7 @@ class MainWindow(QMainWindow):
         """
         self.toolbar.set_roi_enabled(habilitado)
         if habilitado:
+            self.status_mgr.setEPSG(self.loader.crs)
             self.status_mgr.show_message("Imagen lista para analizar", TIMEOUT_LONG)
 
 
@@ -161,7 +162,7 @@ class MainWindow(QMainWindow):
             self.status_mgr.update_progress(0, "Cargando Imagen")
 
             # Creamos el hilo
-            self.worker = LoadWorker( ruta_archivo, loader=self.loader, escala=input_escala, unlock = use_gpu)
+            self.worker = LoadWorker( self.base_path,ruta_archivo, loader=self.loader, escala=input_escala, unlock = use_gpu)
 
             self.worker.progress_update.connect(self.status_mgr.update_progress)
             # Conectamos la señal al nuevo método de ventana emergente
@@ -297,11 +298,19 @@ class MainWindow(QMainWindow):
                     )
                     self.status_mgr.show_message("Carpeta Inválida")
                     return None
-                self.workerTiler = LoadWorker(self.loader.path, coords=(x, y, w, h), mode='tiling', output_dir=analyze_dlg.selected_path)
+                self.workerTiler = LoadWorker(base_project_path=self.base_path, 
+                                              file_path=self.loader.path, 
+                                              coords=(x, y, w, h), 
+                                              mode='tiling', 
+                                              output_dir=analyze_dlg.selected_path)
                 self.status_mgr.show_progress()
-                self.workerTiler.progress_update.connect(self.status_mgr.update_progress)
+
+                self.workerTiler.progress_update[int, str].connect(self.status_mgr.update_progress) # progress for just value and string
+                self.workerTiler.progress_update[int, str, bool].connect(self.status_mgr.update_progress)# progress for loading model (infinite bar progress)
+                #self.workerTiler.progress_update[int, str, bool].connect(self.status_mgr.update_progress)
+
                 self.workerTiler.error.connect(lambda msg: QMessageBox.critical(self, "Error", msg))
-                self.workerTiler.finished.connect(lambda: self._mostrar_resultado_analisis(w, h))
+                self.workerTiler.finished.connect(lambda msg: self._mostrar_resultado_analisis(msg, w, h))
 
                 self.toolbar.set_all_enabled(False)
 
@@ -333,11 +342,11 @@ class MainWindow(QMainWindow):
             return folder_path
         return None
 
-    def _mostrar_resultado_analisis(self, w: float, h: float) -> None:
+    def _mostrar_resultado_analisis(self, msg: str, w: float, h: float) -> None:
         """Muestra el resultado del análisis al usuario."""
         QMessageBox.information(
             self, 
-            "Análisis Completado", 
+            msg, 
             f"Región analizada de {w}×{h} píxeles\n"
         )
 

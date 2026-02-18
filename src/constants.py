@@ -34,3 +34,6 @@ MAX_LIMIT_RENDER_UNLOCK = 32000 #Could check GPU & RAM of the pc to assign a mor
 
 #Analize
 MIN_AREA_KM2 = 10
+
+# Model
+MODEL_NAME = "unet_model.keras"

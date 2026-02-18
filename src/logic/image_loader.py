@@ -9,6 +9,7 @@ class SatelliteLoader:
         self.src = None  # Guardamos la referencia al archivo abierto si la necesitamos luego
         self.path = None
         self.scale_factor = 1.0 # Cuánto redujimos la imagen
+        self.crs = None
     
     ### Update: Esta funcion es manejada por el load_worker
     def get_preview(self, file_path, input_escala=5, bands=[1, 2, 3]):

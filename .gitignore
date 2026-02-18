@@ -10,3 +10,4 @@ data/
 dist/
 build/
 *.spec
+src/logic/modelo/unet_model.keras

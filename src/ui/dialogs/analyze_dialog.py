@@ -11,13 +11,18 @@ class AnalyzeDialog(QDialog):
         self.callback = callback
         self.selected_path = None
 
-        QBtn = (
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
-        )
+        btn_layout = QHBoxLayout()
 
-        self.buttonBox = QDialogButtonBox(QBtn)
-        self.buttonBox.accepted.connect(self.accept)
-        self.buttonBox.rejected.connect(self.reject)
+
+        btn_ok = QPushButton("Cargar")
+        btn_cancel = QPushButton("Cancelar")
+
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel.clicked.connect(self.reject)
+
+        btn_layout.addStretch()
+        btn_layout.addWidget(btn_ok)
+        btn_layout.addWidget(btn_cancel)
 
         self.pushBtn = QPushButton("...", self)
         if self.callback:
@@ -58,9 +63,12 @@ class AnalyzeDialog(QDialog):
         
         main_layout.addWidget(QLabel("Carpeta guardar:"))
         main_layout.addLayout(top_layout)
-        main_layout.addWidget(self.buttonBox)
+        main_layout.addLayout(btn_layout)
         
         self.setLayout(main_layout)
+
+        btn_ok.setDefault(True)
+        btn_ok.setFocus()
 
     def on_button_clicked(self):
         if self.callback:

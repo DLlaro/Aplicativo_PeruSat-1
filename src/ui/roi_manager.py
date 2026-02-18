@@ -148,12 +148,12 @@ class ROIManager:
         """
 
         # Área en kilómetros cuadrados (1 km2 = 1,000,000 m2)
-        area_m2 = real_w * real_h* PIXEL_SIZE_PERU_SAT**2
+        area_m2 = real_w * real_h * PIXEL_SIZE_PERU_SAT**2
         self.area_km2 = area_m2 / 1_000_000 
         
         if self.area_km2 < min_area_km2 :
-            return (False, f"El ROI es demasiado pequeño ({self.area_km2:.2f} km²). "
-                    f"Área mínima requerida: {min_area_km2:.2f} km²")
+            return (False, f"El ROI es pequeño ({self.area_km2:.2f} km²). "
+                    f"Área mínima sugerida: {min_area_km2:.2f} km²")
         
         # 2. Verificar que el ROI esté dentro de los límites de la imagen
         img_height, img_width = original_shape

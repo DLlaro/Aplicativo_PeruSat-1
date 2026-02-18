@@ -5,6 +5,7 @@ class StatusBarManager:
         self.bar = status_bar
         self.lbl_coords = QLabel("Coords: - , -")
         self.lbl_coords_lat_lon = QLabel(" - , -")
+        self.lbl_epsg = QLabel("EPSG: -")
 
         self.progressLabel = QLabel("")
         self.progress = QProgressBar()
@@ -16,6 +17,7 @@ class StatusBarManager:
     def _setup(self):
         self.bar.addPermanentWidget(self.lbl_coords)
         self.bar.addPermanentWidget(self.lbl_coords_lat_lon)
+        self.bar.addPermanentWidget(self.lbl_epsg)
 
         self.bar.addPermanentWidget(self.progressLabel)
         self.bar.addPermanentWidget(self.progress)
@@ -28,8 +30,12 @@ class StatusBarManager:
         self.lbl_coords.setText(f" E: {x_geo:.2f}, N: {y_geo:.2f}")
         self.lbl_coords_lat_lon.setText(f" Lat: {lat:.6f}, Lon: {lon:.6f}")
 
+    def setEPSG(self, crs):
+        self.lbl_epsg.setText(str(crs))
+
+
     def update_roi_area(self, dx, dy, area_km2):
-        self.lbl_coords.setText(f"ROI: {dx:.1f} x {dy:.1f} m | {area_km2:.4f} km²")
+        self.lbl_coords.setText(f"ROI - Ancho:{dx:.1f} x Alto:{dy:.1f} m | Área:{area_km2:.4f} km²")
 
     def show_message(self, msg, timeout=0):
         self.bar.showMessage(msg, timeout)
@@ -47,6 +53,11 @@ class StatusBarManager:
         self.progress.hide()
     
     def update_progress(self, value: int, label: str = None):
-        self.progress.setValue(value)
-        if label:
+        bar_infinite = False
+        if bar_infinite:
+            self.progress.setRange(0,0)
+        else:
+            self.progress.setRange(0,100)
+            self.progress.setValue(value)
+        if label is not None:
             self.progressLabel.setText(label)

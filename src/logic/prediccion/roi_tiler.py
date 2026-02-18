@@ -124,7 +124,8 @@ def normalize_percentiles_per_band(x: np.ndarray, lo: np.ndarray, hi: np.ndarray
     return out
 
 def roi_to_tiles(
-    tuple: tuple,
+    coords: tuple,
+    tif_name: str,
     tif_path: str,
     out_dir: str,
     tile_size: int = 512,
@@ -133,16 +134,17 @@ def roi_to_tiles(
     black_tile_threshold: float = 5.0,
     progress_callback = None
 ):
-    ruta_TIF = tif_path
-    ##Identificador de tif
-    ID_TIF = ruta_TIF.split("/")[-1].split(".")[0]
+    """
+    Preprocesamiento del ROI a tiles
+    Args:
     
+    """
     os.makedirs(out_dir, exist_ok=True)
 
     if progress_callback:
         progress_callback(0, 100, "Paso 1/3: Calculando percentiles...")
     # Calcular percentiles globales
-    lo, hi = compute_global_percentiles_stream_per_band(tif_path, tuple, progress_callback = progress_callback)
+    lo, hi = compute_global_percentiles_stream_per_band(tif_path, coords, progress_callback = progress_callback)
 
     if progress_callback:
         progress_callback(100, 100, "Percentiles calculados")
@@ -151,7 +153,7 @@ def roi_to_tiles(
     if progress_callback:
         progress_callback(0, 100, "Paso 2/3: Generando tiles...")
     with rasterio.open(tif_path) as src:
-        x, y, W, H = tuple
+        x, y, W, H = coords
         bands = src.count
         transform = src.transform
         nodata_value = 0
@@ -178,35 +180,26 @@ def roi_to_tiles(
         ys = range(y, y_end, stride)
         xs = range(x, x_end, stride)
         total_tiles = len(ys) * len(xs)
-
-        tile_count = 0
         
         with tqdm(total=total_tiles,
-          desc=f"Tiling GeoTIFF {ID_TIF}") as pbar:
+          desc=f"Tiling GeoTIFF {tif_name}") as pbar:
             for yi in ys:
                 for xi in xs:
-                    patch_id = f"{ID_TIF}_{i:06d}"
+                    patch_id = f"{tif_name}_{i:06d}"
 
-                    win_w = min(tile_size, x_end - xi)
-                    win_h = min(tile_size, y_end - yi)
+                    # Definimos la ventana teórica (puede estar fuera de los límites del TIF)
+                    window = Window(xi, yi, tile_size, tile_size)
 
-                    window = Window(xi, yi, win_w, win_h)
-                    tile = src.read(window=window)  # (bands, h, w)
+                    # LEER CON BOUNDLESS: 
+                    # Si xi o yi están fuera, o si la ventana excede el ancho/alto, 
+                    # rasterio rellena automáticamente con fill_value (ceros).
+                    tile = src.read(window=window, boundless=True, fill_value=0)
 
-                    # ---- PAD con ceros si no es 512x512 ----
-                    if win_h < tile_size or win_w < tile_size:
-                        padded = np.zeros((bands, tile_size, tile_size), dtype=tile.dtype)
-                        padded[:, :win_h, :win_w] = tile
-                        tile = padded
-
-                    # Detectar nodata
-                    if nodata_value is not None:
-                        valid_pixels = win_h * win_w * bands
-                        nodata_pixels = (tile[:, :win_h, :win_w] == nodata_value).sum()
-                        nodata_fraction = nodata_pixels / valid_pixels
-                    else:
-                        nodata_fraction = 0
-
+                    # Calcular fracción de nodata
+                    # Como el tile ya tiene el tamaño final, el cálculo es directo
+                    valid_pixels = tile_size * tile_size * bands
+                    nodata_pixels = (tile == nodata_value).sum()
+                    nodata_fraction = nodata_pixels / valid_pixels
 
                     #if nodata_fraction > nodata_threshold:
                     #    continue
@@ -268,17 +261,14 @@ def roi_to_tiles(
                     })
 
                     i += 1
-                    tile_count +=1
                     pbar.update(1)
 
                 # Reportar progreso del tiling
                 if progress_callback:
-                    progress = int((tile_count / total_tiles) * 100)
+                    progress = int((i / total_tiles) * 100)
                     progress_callback(progress, 100, f"Generando tiles:")
 
     # ===== PASO 3: Guardar metadatos =====
-    if progress_callback:
-        progress_callback(0, 100, "Paso 3/3: Guardando metadatos...")
 
     gdf = gpd.GeoDataFrame(
         features,
