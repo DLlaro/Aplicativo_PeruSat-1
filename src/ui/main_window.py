@@ -18,7 +18,7 @@ from ui.handlers.mouse_handler import MouseHandler
 from ui.handlers.keyboard_handler import KeyboardHandler
 
 from constants import (DEFAULT_SCALE_FACTOR, DEFAULT_WINDOW_HEIGHT, 
-                       DEFAULT_WINDOW_WIDTH, TIMEOUT_SHORT, 
+                       DEFAULT_WINDOW_WIDTH, MSG_ROI_ACTIVE, MSG_ROI_READY, MSG_IMAGE_LOADED, 
                        TIMEOUT_MEDIUM, TIMEOUT_LONG, MIN_AREA_KM2)
 
 class MainWindow(QMainWindow):
@@ -62,9 +62,9 @@ class MainWindow(QMainWindow):
     def toggle_action_roi(self, is_active: bool):
         self.toolbar.set_roi_checked(is_active)        # setText happens inside here
         if is_active:
-            self.status_mgr.show_message("Modo Selección: Dibuje un rectángulo en el visor")
+            self.status_mgr.show_message(MSG_ROI_ACTIVE)
         else:
-            self.status_mgr.show_message("Listo", TIMEOUT_MEDIUM)
+            self.status_mgr.show_message(MSG_IMAGE_LOADED, TIMEOUT_MEDIUM)
 
     def existe_poligono(self, tiene_datos: bool):
         """
@@ -74,7 +74,7 @@ class MainWindow(QMainWindow):
         self.toolbar.set_analyze_enabled(tiene_datos)
         self.toolbar.set_reset_enabled(tiene_datos)
         if tiene_datos:
-            self.status_mgr.show_message("ROI detectado. Listo para análisis.", TIMEOUT_MEDIUM)
+            self.status_mgr.show_message(MSG_ROI_READY, TIMEOUT_MEDIUM)
         else:
             self.status_mgr.show_message("Dibuje un área para analizar.", TIMEOUT_MEDIUM)
 
