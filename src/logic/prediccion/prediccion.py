@@ -19,11 +19,6 @@ def predict_tiles_multiclase(input_dir, output_dir, model, progress_callback = N
     """
     os.makedirs(output_dir, exist_ok=True)
     tile_paths = glob(os.path.join(input_dir, "*.tif"))
-    
-    print(f"Encontrados {len(tile_paths)} tiles para predecir")
-    
-    if progress_callback:
-        progress_callback(0, 100, "Infiriendo:")
 
     tile_count = 0
 
@@ -49,6 +44,11 @@ def predict_tiles_multiclase(input_dir, output_dir, model, progress_callback = N
 
             # Predicción
             pred = model.predict(img_ready, verbose=0)  # (1, H, W, n_classes)
+
+            if tile_count == 0:
+                print(f"Encontrados {len(tile_paths)} tiles para predecir")
+                if progress_callback:
+                    progress_callback(0, 100, "Infiriendo:")
             
             # Máscara final usando argmax
             mask_class = np.argmax(pred[0], axis=-1).astype(np.uint8)
@@ -78,8 +78,6 @@ def predict_tiles_multiclase(input_dir, output_dir, model, progress_callback = N
             continue
     
     print(f"\nPredicción completada. Máscaras guardadas en: {output_dir}")
-
-
 
 def predict_tiles(input_dir, output_dir, model, threshold=0.5):
     """

@@ -20,7 +20,9 @@ def raster_to_vector(mask_path: str, out_dir: str, background_value: int = 0, pr
     count = 0
 
     if progress_callback:
-        progress_callback(0, 100, "Paso: Vectorizando...")
+        progress_callback(0, 100, "Vectorizando...")
+
+    path_list = []
 
     for tif in glob.glob(f"{mask_path}/*.tif"):
         nombre = os.path.splitext(os.path.basename(tif))[0]
@@ -43,9 +45,12 @@ def raster_to_vector(mask_path: str, out_dir: str, background_value: int = 0, pr
         # Guardar a archivo vectorial
         gdf.to_file(f"{salida}", driver="GPKG")
         print(f"Vectorizado guardado en {salida}")
+        path_list.append(salida)
 
         count += 1
 
         if progress_callback:
                 progress = int((count / len(glob.glob(f"{mask_path}/*.tif"))) * 100)
                 progress_callback(progress, 100, f"Reconstruyendo el ROI:")
+
+    return path_list

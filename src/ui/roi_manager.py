@@ -22,6 +22,7 @@ class ROIManager:
         self.on_data_changed_callback = onDataChanged # Guardamos el callback
         self.isActivated = False
         self.area_km2 = 0.0
+        self.coords: tuple = None
 
     def activar_herramienta(self):
         """Toggle ROI drawing mode"""
@@ -104,35 +105,8 @@ class ROIManager:
     def tiene_datos(self) -> bool:
         """Check if ROI has valid data"""
         return self.layer is not None and len(self.layer.data) > 0
-
-    def rectangle_to_coords(self, layer, scale_factor) -> tuple[float, float, float, float]:
-        """
-        Extrae las coordenadas y dimensiones reales del ROI desde la capa.
-        
-        Args:
-            layer: Capa de shapes de Napari
-        
-        Returns:
-            tuple: (real_x, real_y, real_w, real_h)
-        """
-        shape_data = layer.data[-1]
-        shape_data = np.array(shape_data)
-
-        # shape_data tiene forma (n_vertices, 2) donde cada fila es [y, x]
-        y_coords = shape_data[:, 0]
-        x_coords = shape_data[:, 1]
-        
-        y_min, y_max = y_coords.min(), y_coords.max()
-        x_min, x_max = x_coords.min(), x_coords.max()
-        
-        real_x = int(x_min / scale_factor)
-        real_y = int(y_min / scale_factor)
-        real_w = int((x_max - x_min) / scale_factor)
-        real_h = int((y_max - y_min) / scale_factor)
-        
-        return (real_x, real_y, real_w, real_h)
     
-    def validar_roi(self, real_x, real_y, real_w, real_h, min_area_km2=10, original_shape = None):
+    def validar_roi(self, min_area_km2=10, original_shape = None):
         """
         Valida que el ROI sea válido para análisis.
         
@@ -146,6 +120,7 @@ class ROIManager:
         Returns:
             tuple: (es_valido: bool, mensaje_error: str)
         """
+        real_x, real_y, real_w, real_h = self.coords
 
         # Área en kilómetros cuadrados (1 km2 = 1,000,000 m2)
         area_m2 = real_w * real_h * PIXEL_SIZE_PERU_SAT**2

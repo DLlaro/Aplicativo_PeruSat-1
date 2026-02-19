@@ -1,7 +1,7 @@
 # mouse_handler.py
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from logic.coordinate_utils import cursor_to_coords
+from logic.utils.coordinate_utils import cursor_to_coords, rectangle_to_coords
 from constants import PIXEL_SIZE_PERU_SAT
 
 if TYPE_CHECKING:
@@ -98,5 +98,6 @@ class MouseHandler:
             yield
 
         # ← everything below runs on RELEASE
+        self.mw.roi_manager.coords = rectangle_to_coords(self.mw.roi_manager.layer, scale_factor= self.mw.loader.scale_factor)
         release_pos = event.position
         #self.roi_manager.on_drag_end(release_pos)    # adapt to your API

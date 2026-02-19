@@ -6,6 +6,7 @@ class StatusBarManager:
         self.lbl_coords = QLabel("Coords: - , -")
         self.lbl_coords_lat_lon = QLabel(" - , -")
         self.lbl_epsg = QLabel("EPSG: -")
+        self.lbl_escala = QLabel("Escala: 1 : -")
 
         self.progressLabel = QLabel("")
         self.progress = QProgressBar()
@@ -18,6 +19,7 @@ class StatusBarManager:
         self.bar.addPermanentWidget(self.lbl_coords)
         self.bar.addPermanentWidget(self.lbl_coords_lat_lon)
         self.bar.addPermanentWidget(self.lbl_epsg)
+        self.bar.addPermanentWidget(self.lbl_escala)
 
         self.bar.addPermanentWidget(self.progressLabel)
         self.bar.addPermanentWidget(self.progress)
@@ -32,6 +34,9 @@ class StatusBarManager:
 
     def setEPSG(self, crs):
         self.lbl_epsg.setText(str(crs))
+
+    def setEscala(self, escala):
+        self.lbl_escala.setText(f"Escala: 1 : {escala}")
 
 
     def update_roi_area(self, dx, dy, area_km2):
@@ -52,8 +57,7 @@ class StatusBarManager:
         self.progressLabel.hide()
         self.progress.hide()
     
-    def update_progress(self, value: int, label: str = None):
-        bar_infinite = False
+    def update_progress(self, value: int, label: str = None, bar_infinite = False):
         if bar_infinite:
             self.progress.setRange(0,0)
         else:

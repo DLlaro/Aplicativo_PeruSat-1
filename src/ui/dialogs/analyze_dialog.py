@@ -13,8 +13,7 @@ class AnalyzeDialog(QDialog):
 
         btn_layout = QHBoxLayout()
 
-
-        btn_ok = QPushButton("Cargar")
+        btn_ok = QPushButton("Analizar")
         btn_cancel = QPushButton("Cancelar")
 
         btn_ok.clicked.connect(self.accept)

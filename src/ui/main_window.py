@@ -34,7 +34,6 @@ class MainWindow(QMainWindow):
         # Instancias Lógicas
         self.loader = SatelliteLoader()
         self.viewer_model= ViewerModel()
-        self.viewer_model.theme = 'dark'  # Opciones: 'dark', 'light', 'system'
 
         # Componentes
         self.viewer_panel = ViewerPanel(self.viewer_model, self.base_path)
@@ -104,51 +103,35 @@ class MainWindow(QMainWindow):
         self.toolbar.set_roi_enabled(habilitado)
         if habilitado:
             self.status_mgr.setEPSG(self.loader.crs)
+            self.toolbar.set_open_enabled(True)
+            self.status_mgr.setEscala(f"{1/self.loader.scale_factor:.1f}")
             self.status_mgr.show_message("Imagen lista para analizar", TIMEOUT_LONG)
+            self.status_mgr.hide_progress()
 
 
     def abrir_archivo(self):
         # 1. Seleccionar archivo primero (Mejor UX)
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Abrir Raster", "", "GeoTIFF (*.tif *.tiff)",
+        raster_path, _ = QFileDialog.getOpenFileName(
+            self, "Abrir Raster","", "GeoTIFF (*.tif *.tiff)",
         )
         
-        if not path:
+        if not raster_path:
             return # El usuario canceló el explorador
+        
+        self.workerMetadata = LoadWorker(file_path = raster_path, loader = self.loader , mode = 'metadata')
+        self.workerMetadata.finished.connect(lambda shape: self.mostrar_load_dialog(raster_path, height = shape[0], width = shape[1]))
+        self.workerMetadata.error.connect(lambda msg: QMessageBox.critical(self, "Error", msg))
+        self.workerMetadata.start()
+        
 
-        # 2. Show custom dialog
-        dialog = LoadDialog(self)
+    def mostrar_load_dialog(self, raster_path, width = 0, height = 0):
+        #Show custom dialog
+        dialog = LoadDialog(self, width, height)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             escala, use_gpu = dialog.get_values()
-            self.cargar_en_visor(path, escala, use_gpu)
+            self.cargar_en_visor(raster_path, escala, use_gpu)
         else:
             print("Carga cancelada.")
-
-    def input_dialog(self, titulo="", texto="", mode=QInputDialog.InputMode):
-        dialog = QInputDialog(self)
-        dialog.setInputMode(mode)
-        dialog.setWindowTitle(titulo)
-        dialog.setLabelText(texto)
-
-        # Configuración según modo
-        if mode == QInputDialog.InputMode.IntInput:
-            dialog.setIntRange(DEFAULT_SCALE_FACTOR, 10)
-            dialog.setIntValue(DEFAULT_SCALE_FACTOR)
-        
-        dialog.resize(300, 150)
-        
-        ok = dialog.exec()
-        
-        # Extraer el valor según el modo
-        res = None
-        if ok:
-            self.toolbar.set_open_enabled(False)
-            if mode == QInputDialog.InputMode.IntInput:
-                res = dialog.intValue()
-            elif mode == QInputDialog.InputMode.TextInput:
-                res = dialog.textValue()
-                
-        return ok, res
 
     def cargar_en_visor(self, ruta_archivo, input_escala, use_gpu = False):
         self.archivo_cargado = False
@@ -162,8 +145,8 @@ class MainWindow(QMainWindow):
             self.status_mgr.update_progress(0, "Cargando Imagen")
 
             # Creamos el hilo
-            self.worker = LoadWorker( self.base_path,ruta_archivo, loader=self.loader, escala=input_escala, unlock = use_gpu)
-
+            self.worker = LoadWorker(ruta_archivo, base_project_path=self.base_path, loader = self.loader, escala = input_escala, unlock = use_gpu, mode = 'load')
+            
             self.worker.progress_update.connect(self.status_mgr.update_progress)
             # Conectamos la señal al nuevo método de ventana emergente
             self.worker.status_msg.connect(lambda msg: QMessageBox.warning(self, "Optimizacion de Escala", msg, QMessageBox.StandardButton.Ok) )
@@ -195,23 +178,13 @@ class MainWindow(QMainWindow):
 
     def finalizar_carga_img(self, img_data):
         # Añadimos a Napari
-        self.viewer_model.add_image(img_data, name="PeruSat-1 Preview")
+        self.viewer_model.add_image(img_data, name="PeruSat-1 Preview", rgb=True)
         self.status_mgr.show_message("Imagen cargada exitosamente", TIMEOUT_LONG)
-
-        # --- visualizar la imagen ---
-        self.viewer_model.add_image(
-            img_data, 
-            name='Vista Satelital',
-            rgb=True
-        )
         self.viewer_model.reset_view()
 
         # Actulizar flag
         self.archivo_cargado = True
-        self.toolbar.set_open_enabled(True)
         print("Nueva imagen cargada correctamente.")
-
-        self.status_mgr.hide_progress()
     
     def limpiar_visor(self):
         """Elimina todas las capas (Imagen y Shapes) y resetea la cámara"""
@@ -243,16 +216,11 @@ class MainWindow(QMainWindow):
         3. Ejecuta inferencia con PyTorch
         """
         try:
-            x, y, w, h = self.roi_manager.rectangle_to_coords(
-                layer = self.roi_manager.layer,
-                scale_factor = self.loader.scale_factor
-            )
 
             # Validar ROI
             es_valido, mensaje = self.roi_manager.validar_roi(
-                x, y, w, h, 
                 min_area_km2 = MIN_AREA_KM2, 
-                original_shape = self.loader.original_shape
+                original_shape = self.loader.get_original_shape()
             )
 
             if not es_valido:
@@ -299,25 +267,22 @@ class MainWindow(QMainWindow):
                     self.status_mgr.show_message("Carpeta Inválida")
                     return None
                 self.workerTiler = LoadWorker(base_project_path=self.base_path, 
-                                              file_path=self.loader.path, 
-                                              coords=(x, y, w, h), 
+                                              file_path=self.loader.path,
+                                              loader = self.loader,
+                                              coords=self.roi_manager.coords, 
                                               mode='tiling', 
                                               output_dir=analyze_dlg.selected_path)
                 self.status_mgr.show_progress()
 
-                self.workerTiler.progress_update[int, str].connect(self.status_mgr.update_progress) # progress for just value and string
-                self.workerTiler.progress_update[int, str, bool].connect(self.status_mgr.update_progress)# progress for loading model (infinite bar progress)
+                self.workerTiler.progress_update.connect(self.status_mgr.update_progress)# progress for loading model (infinite bar progress)
                 #self.workerTiler.progress_update[int, str, bool].connect(self.status_mgr.update_progress)
 
                 self.workerTiler.error.connect(lambda msg: QMessageBox.critical(self, "Error", msg))
-                self.workerTiler.finished.connect(lambda msg: self._mostrar_resultado_analisis(msg, w, h))
+                self.workerTiler.finished.connect(self._mostrar_resultado_analisis)
 
                 self.toolbar.set_all_enabled(False)
 
                 self.workerTiler.start()
-
-                print(f"Enviando a PyTorch región: x={x}, y={y}, w={w}, h={h}")
-
                 # TODO: inferencia real con PyTorch
                 # resultado = self.modelo.eval(...)
                 #image_to_tiles(self.base_path, )
@@ -342,13 +307,33 @@ class MainWindow(QMainWindow):
             return folder_path
         return None
 
-    def _mostrar_resultado_analisis(self, msg: str, w: float, h: float) -> None:
+    def _mostrar_resultado_analisis(self, shape_data: object) -> None:
         """Muestra el resultado del análisis al usuario."""
+
+        # Determine which method to use based on the data type
+        if shape_data['type'] == 'points':
+            self.viewer_model.add_points(
+                shape_data['data'],
+                name='Puntos Detectados',
+                face_color='magenta',
+                size=10
+            )
+        elif shape_data['type'] == 'shapes':
+            self.viewer_model.add_shapes(
+                shape_data['data'],
+                name='Polígonos Detectados',
+                shape_type=shape_data['shape_type'],
+                edge_color='cyan',
+                face_color=[0, 1, 1, 0.3]
+            )
+        
         QMessageBox.information(
             self, 
-            msg, 
-            f"Región analizada de {w}×{h} píxeles\n"
+            "Analisis completado", 
+            f"Capa vectorial añadida con éxito\n"
         )
+        
+        print(f"Capa vectorial añadida con éxito")
 
         self.toolbar.set_all_enabled(True)
         self.status_mgr.hide_progress()
