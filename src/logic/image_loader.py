@@ -3,7 +3,9 @@ from rasterio.enums import Resampling
 import numpy as np
 import random
 
-from constants import MAX_LIMIT_RENDER, MAX_LIMIT_RENDER_UNLOCK, MODEL_NAME
+from logic.utils.config_manager import settings
+
+from constants import MAX_LIMIT_RENDER, MAX_LIMIT_RENDER_UNLOCK
 
 class SatelliteLoader:
     def __init__(self):
@@ -40,10 +42,9 @@ class SatelliteLoader:
             raise e
 
     def get_preview(self, 
-                    file_path: str = "", 
-                    unlock: bool = False, 
-                    escala_input: int = 50, 
-                    bands: list = [1, 2, 3], 
+                    file_path: str = "",
+                    escala_input: int = 50,
+                    bands: list = [1, 2, 3],
                     progress_callback = None):
         """
         Lee una vista previa (downsampled) de la imagen para visualización rápida.
@@ -59,7 +60,7 @@ class SatelliteLoader:
                 self.transform = src.transform
                 self.crs = src.crs
                 #print("unlock", self.unlock)
-                if unlock:
+                if settings.use_gpu:
                     max_render = MAX_LIMIT_RENDER_UNLOCK
                 else:
                     max_render = MAX_LIMIT_RENDER

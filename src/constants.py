@@ -7,7 +7,7 @@ DEFAULT_SCALE_FACTOR = 50
 # UI defaults
 DEFAULT_WINDOW_WIDTH = 1200
 DEFAULT_WINDOW_HEIGHT = 800
-LOGO_SIZE = 120
+LOGO_SIZE = 300
 
 # File paths
 ASSETS_DIR = "assets"
@@ -34,6 +34,3 @@ MAX_LIMIT_RENDER_UNLOCK = 32000 #Could check GPU & RAM of the pc to assign a mor
 
 #Analize
 MIN_AREA_KM2 = 10
-
-# Model
-MODEL_NAME = "unet_model.keras"

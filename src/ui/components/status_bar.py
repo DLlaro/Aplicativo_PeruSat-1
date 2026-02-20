@@ -27,7 +27,6 @@ class StatusBarManager:
         self.progressLabel.hide()
         self.progress.hide()
         
-
     def update_coords(self, x_geo, y_geo, lat, lon):
         self.lbl_coords.setText(f" E: {x_geo:.2f}, N: {y_geo:.2f}")
         self.lbl_coords_lat_lon.setText(f" Lat: {lat:.6f}, Lon: {lon:.6f}")

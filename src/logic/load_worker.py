@@ -2,15 +2,12 @@ from PySide6.QtCore import QThread, Signal
 import random
 from logic.prediccion.roi_tiler import roi_to_tiles
 from logic.image_loader import SatelliteLoader
-from tensorflow import keras
 from logic.prediccion.prediccion import predict_tiles_multiclase
 from logic.prediccion.reconstruccion import stitch_tiles_by_class
 from logic.prediccion.to_gpkg import raster_to_vector
 from logic.prediccion.limpiar_archivos import clean_temp_files
 from logic.prediccion.cargar_capa import load_vector_to_napari
 import os
-
-from constants import MODEL_NAME
 
 class LoadWorker(QThread):
     # En PySide6 se usa Signal en lugar de pyqtSignal
@@ -26,8 +23,8 @@ class LoadWorker(QThread):
                  coords: tuple = None, 
                  loader: SatelliteLoader= None,  
                  escala: int = None,
-                 unlock: bool = False,
-                 mode: str= 'load', 
+                 mode: str= 'load',
+                 modelo = None, 
                  output_dir: str = None):
         super().__init__()
         self.coords = coords
@@ -37,7 +34,7 @@ class LoadWorker(QThread):
         self.file_path = file_path
         self.output_path = output_dir
         self.escala = escala
-        self.unlock = unlock
+        self.modelo = modelo
 
     def run(self):
         try:
@@ -72,7 +69,6 @@ class LoadWorker(QThread):
         self.progress_update.emit((5 + rand1), "Cargando", False)
 
         img_vis = self.loader.get_preview(file_path= self.file_path, 
-                                unlock= self.unlock,
                                 escala_input= self.escala, 
                                 progress_callback = self.progress)
         
@@ -97,7 +93,6 @@ class LoadWorker(QThread):
             
             # Crear directorios si no existen
             for path in paths.values():
-                print(path)
                 os.makedirs(path, exist_ok=True)
     
             print("\n[1/5] Dividiendo imagen...")
@@ -114,11 +109,11 @@ class LoadWorker(QThread):
 
             print("\n[2/5] Cargando modelo...")
             self.progress_update.emit(0,"Cargando Modelo...", True)
-            model = keras.models.load_model(os.path.join(self.base_project_path, 'logic','modelo', MODEL_NAME), compile=False)
+            #model = keras.models.load_model(os.path.join(self.base_project_path, 'logic','modelo', MODEL_NAME), compile=False)
             print("Modelo cargado")
 
             print("\n[3/5] Generando predicciones...")
-            predict_tiles_multiclase(paths['tiles'], paths['masks'], model, progress_callback=self._on_tiling_progress)
+            predict_tiles_multiclase(paths['tiles'], paths['masks'], self.modelo, progress_callback=self._on_tiling_progress)
 
             print("\n[4/5] Reconstruyendo imagen completa...")
             stitch_tiles_by_class(TIF_ID, paths['tiles'], paths['masks'], paths['recons'], progress_callback=self._on_tiling_progress)
@@ -127,11 +122,10 @@ class LoadWorker(QThread):
             gpkg_paths = raster_to_vector(paths['recons'], out_dir=paths['gpkg'], progress_callback=self._on_tiling_progress)
 
             #Eliminar tiles, masks, recons
-            #clean_temp_files(paths)
+            clean_temp_files(paths)
 
             print("\nCargando puntos al visor")
             
-            print(self.loader.transform)
             shape = load_vector_to_napari(gpkg_paths[1], self.loader)
 
             self.finished.emit(shape)

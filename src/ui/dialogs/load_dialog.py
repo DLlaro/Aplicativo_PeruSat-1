@@ -1,7 +1,10 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
-                               QSpinBox, QCheckBox, QPushButton, QLineEdit, QFrame)
+                               QSpinBox, QPushButton, QLineEdit, QFrame)
 
-from logic.utils.utils import get_nvidia_info, get_ram_info
+from logic.utils.utils import get_ram_info
+from logic.utils.config_manager import settings
+from constants import MAX_LIMIT_RENDER
+
 
 class LoadDialog(QDialog):
     def __init__(self, parent=None, w = None, h = None):
@@ -16,9 +19,8 @@ class LoadDialog(QDialog):
     
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        
-        gpu = get_nvidia_info()
-        ram = get_ram_info()
+        gpu_info = settings.gpu_info
+        ram: dict = get_ram_info()
 
         # Crear contenedor
         frame = QFrame()
@@ -29,20 +31,6 @@ class LoadDialog(QDialog):
 
         layout.addWidget(self._ram_specs(frame, ram))
 
-        # GPU checkbox FIRST — affects scale range
-        self.chk_gpu = QCheckBox("Usar aceleración GPU (no disponible)")
-
-        if gpu and gpu["vram_free_mb"] >= 4096 and ram["available_mb"] >= 8192:
-            self.chk_gpu.setText("Usar aceleración GPU (disponible)")
-            self.chk_gpu.setEnabled(True)
-            print("GPU potente disponible")
-            layout.addWidget(self._gpu_specs(frame, gpu))
-        else:
-            self.chk_gpu.setEnabled(False)
-
-        self.chk_gpu.toggled.connect(self._on_gpu_toggled)  # Connect signal
-        layout.addWidget(self.chk_gpu)
-    
         # Scale factor
         scale_layout = QHBoxLayout()
         scale_layout.addWidget(QLabel("Calidad de la imagen:"))
@@ -58,6 +46,17 @@ class LoadDialog(QDialog):
 
         scale_layout.addWidget(self.spin_escala)
 
+        if settings.use_gpu:
+            if not gpu_info["gpu_name"]=="CPU" and ram["available_mb"] >= 8192:
+                print("GPU potente disponible")
+                layout.addWidget(self._gpu_specs(frame, gpu_info))
+                self._unlock_scale()  
+        elif self.w < MAX_LIMIT_RENDER and self.h < MAX_LIMIT_RENDER:
+            self._unlock_scale()
+        else:
+            self._lock_scale()
+
+        
         ## Redimension 
         # Scale factor
         diemensiones_layout = QVBoxLayout()
@@ -115,31 +114,28 @@ class LoadDialog(QDialog):
         )
         return frame
 
-    def _gpu_specs(self, frame: QFrame, gpu):
+    def _gpu_specs(self, frame: QFrame, gpu: dict):
         frame_layout_gpu = frame.layout()
-        frame_layout_gpu.addWidget(QLabel(f"GPU: <b>{gpu['name']}</b>"))
+        frame_layout_gpu.addWidget(QLabel(f"GPU: <b>{gpu['gpu_name']}</b>"))
         frame_layout_gpu.addWidget(
-            QLabel(f"\t<b>VRAM:</b> Disponible = <b>{gpu['vram_free_mb']} MB </b> | "
-                f"Total = <b>{gpu['vram_total_mb']} MB </b>")
+            QLabel(f"<b>VRAM:</b> Usado = <b>{gpu['usado_mb']} MB </b> | "
+                f"Total = <b>{gpu['total_mb']} MB </b>")
         )
         return frame        
     
-    def _on_gpu_toggled(self, checked: bool):
-        """Update scale range based on GPU checkbox"""
-        if checked:
-            # GPU enabled => allow factor 2 (1/2 resolution)
-            self.spin_escala.setRange(10, 100)
-            self.spin_escala.setToolTip("100%: Original, 10-90: Reducido")
-        else:
-            # GPU disabled => minimum factor 5
-            current = self.spin_escala.value()
-            self.spin_escala.setRange(10, 50)
-            
-            # Adjust current value if it's now out of range
-            if current < 50:
-                self.spin_escala.setValue(40)
-            
-            self.spin_escala.setToolTip("10-50%: Sin GPU")
+    def _unlock_scale(self):
+        self.spin_escala.setRange(10, 100)
+        self.spin_escala.setToolTip("100%: Original, 10-90: Reducido")
+
+    def _lock_scale(self):
+        current = self.spin_escala.value()
+        self.spin_escala.setRange(10, 50)
+        
+        # Adjust current value if it's out of range
+        if current < 50:
+            self.spin_escala.setValue(40)
+        
+        self.spin_escala.setToolTip("10-50%: Sin GPU")
 
     def _on_spin_changed(self):
         self._update_dimensions()
@@ -154,4 +150,4 @@ class LoadDialog(QDialog):
     
     def get_values(self):
         """Returns (escala, use_gpu)"""
-        return self.spin_escala.value(), self.chk_gpu.isChecked()
+        return self.spin_escala.value()

@@ -3,6 +3,9 @@ import numpy as np
 import os
 from glob import glob
 from tqdm import tqdm
+import tensorflow as tf
+
+from logic.utils.config_manager import settings
 
 # ImageNet mean/std debido al backbone de resnet34
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -21,6 +24,16 @@ def predict_tiles_multiclase(input_dir, output_dir, model, progress_callback = N
     tile_paths = glob(os.path.join(input_dir, "*.tif"))
 
     tile_count = 0
+    
+    # Predicción
+    # Force CPU for this specific operation
+    modelo_mode = ""
+
+    # Force GPU for this specific operation
+    if settings.gpu_info['gpu_name']=='CPU':
+        modelo_mode = '/CPU:0'
+    else:
+        modelo_mode = '/GPU:0'
 
     for image_path in tqdm(tile_paths, desc="Prediciendo tiles"):
         filename = "mask_pred_"+os.path.basename(image_path)
@@ -42,10 +55,12 @@ def predict_tiles_multiclase(input_dir, output_dir, model, progress_callback = N
 
             img_ready = np.expand_dims(img_rgb, axis=0)
 
-            # Predicción
-            pred = model.predict(img_ready, verbose=0)  # (1, H, W, n_classes)
+            with tf.device(modelo_mode):
+                pred = model.predict(img_ready, verbose=0)
+            #pred = model.predict(img_ready, verbose=0)  # (1, H, W, n_classes)
 
             if tile_count == 0:
+                print(modelo_mode)
                 print(f"Encontrados {len(tile_paths)} tiles para predecir")
                 if progress_callback:
                     progress_callback(0, 100, "Infiriendo:")

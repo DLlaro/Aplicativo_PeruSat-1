@@ -37,6 +37,12 @@ class AppToolbar(QToolBar):
         )
         self.action_reset.setEnabled(False)
 
+        self.action_config = QAction(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_DriveCDIcon),
+            "Configuración", self
+        )
+        self.action_config.setEnabled(True)
+
     def _setup(self):
         self.addAction(self.action_open)        # self IS the toolbar
         self.addSeparator()
@@ -45,6 +51,8 @@ class AppToolbar(QToolBar):
         self.addAction(self.action_analyze)
         self.addSeparator()
         self.addAction(self.action_reset)
+        self.addSeparator()
+        self.addAction(self.action_config)
 
     # ------------------------------------------------------------------
     # Public API
@@ -65,6 +73,9 @@ class AppToolbar(QToolBar):
 
     def set_reset_enabled(self, enabled: bool):
         self.action_reset.setEnabled(enabled)
+
+    def set_config_enabled(self, enabled: bool):
+        self.action_config.setEnabled(enabled)
     
     def set_all_enabled(self, enabled: bool):
         """Enable/disable all toolbar actions (e.g., during file loading)"""
@@ -72,3 +83,4 @@ class AppToolbar(QToolBar):
         self.action_roi.setEnabled(enabled)
         self.action_analyze.setEnabled(enabled)
         self.action_reset.setEnabled(enabled)
+        self.action_config.setEnabled(enabled)
