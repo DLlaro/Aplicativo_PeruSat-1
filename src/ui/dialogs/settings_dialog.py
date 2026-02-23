@@ -34,22 +34,17 @@ class SettingsDialog(QDialog):
             self.chk_gpu.setEnabled(False)
         layout.addWidget(self.chk_gpu)
 
-        self.chk_growth = QCheckBox("Activar Memory Growth (Recomendado)")
-        self.chk_growth.setChecked(settings.gpu_memory_growth)
-        layout.addWidget(self.chk_growth)
-
         # Botones Guardar/Cerrar
         btn_save = QPushButton("Guardar y Aplicar")
         btn_save.clicked.connect(self.save_settings)
         layout.addWidget(btn_save)
 
     def browse_model(self):
-        path, _ = QFileDialog.getOpenFileName(self, "Seleccionar Modelo", "", "Keras Model (*.keras)")
+        path, _ = QFileDialog.getOpenFileName(self, "Seleccionar Modelo", "", "Torch weights (*.pth)")
         if path:
             self.lbl_path.setText(path)
 
     def save_settings(self):
         settings.model_path = self.lbl_path.text()
         settings.use_gpu = self.chk_gpu.isChecked()
-        settings.gpu_memory_growth = self.chk_growth.isChecked()
         self.accept()

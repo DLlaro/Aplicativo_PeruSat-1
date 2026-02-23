@@ -1,0 +1,82 @@
+import rasterio
+import numpy as np
+import os
+import torch
+from glob import glob
+from tqdm import tqdm
+
+from logic.utils.config_manager import settings
+
+def predict_tiles_multiclase(input_dir, output_dir, model, progress_callback = None):
+    """
+    Predice máscaras multiclase para todos los tiles TIF en una carpeta.
+
+    Clases:
+    0 = background
+    1 = road
+    2 = building
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    tile_paths = glob(os.path.join(input_dir, "*.tif"))
+    
+    if not tile_paths:
+        print("No se encontraron archivos .tif")
+        return
+
+    # Configuración de hardware
+    device = torch.device('cuda' if torch.cuda.is_available() and settings.use_gpu else 'cpu')
+    model.to(device)
+    model.eval() # Modo evaluación
+    
+    print(f"Modo de ejecución: {device}")
+    
+    tile_count = 0
+    total_tiles = len(tile_paths)
+
+    for image_path in tqdm(tile_paths, desc="Prediciendo tiles"):
+        filename = "mask_pred_" + os.path.basename(image_path)
+        output_path = os.path.join(output_dir, filename)
+        
+        try:
+            with rasterio.open(image_path) as src:
+                img = src.read().astype(np.float32) # (Bands, H, W) -> PyTorch prefiere este orden
+                meta = src.meta.copy()
+                # Si read() ya da (C, H, W), no necesitamos mover ejes para el modelo,
+                # pero sí para la normalización ImageNet si la haces con Numpy.
+            
+            # 1. Preprocesamiento
+            img_rgb = img[:3] / 255.0   
+            
+            # 2. Preparar Tensor (H, W, C) -> (C, H, W)
+            img_input = np.ascontiguousarray(img_rgb)
+            image_t = torch.from_numpy(img_input).unsqueeze(0).to(device)
+
+            # 3. Inferencia
+            with torch.inference_mode():
+                logits = model(image_t)
+                # Softmax + Argmax para multiclase
+                probs = torch.softmax(logits, dim=1)
+                mask_t = torch.argmax(probs, dim=1).squeeze(0)
+                mask_class = mask_t.cpu().numpy().astype(np.uint8)
+
+            # 4. Guardar máscara con Rasterio
+            meta.update({
+                "driver": "GTiff",
+                "count": 1,
+                "dtype": "uint8",
+                "compress": "lzw"
+            })
+            
+            with rasterio.open(output_path, "w", **meta) as dst:
+                dst.write(mask_class, 1)
+            
+            tile_count += 1
+            if progress_callback:
+                progress = int((tile_count / total_tiles) * 100)
+                progress_callback(progress, 100, f"Procesando {tile_count}/{total_tiles}")
+
+        except Exception as e:
+            print(f"Error procesando {os.path.basename(image_path)}: {str(e)}")
+            continue
+    
+    print(f"\nPredicción completada. Máscaras en: {output_dir}")

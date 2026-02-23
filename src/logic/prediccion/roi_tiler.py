@@ -9,7 +9,12 @@ from shapely.geometry import box
 from rasterio.transform import xy
 import geopandas as gpd
 
-def compute_global_percentiles_stream_per_band(tif_path: str, coords: tuple, pmin=2, pmax=98, bands=[1,2,3], nbins=10000, progress_callback = None):
+def compute_global_percentiles_stream_per_band(tif_path: str, 
+                                               coords: tuple, 
+                                               pmin=2, pmax=98, 
+                                               bands=[1,2,3], 
+                                               nbins=10000, 
+                                               progress_callback = None):
     with rasterio.open(tif_path) as src:
         x, y, h, w = coords
         nodata = 0
@@ -115,7 +120,7 @@ def normalize_percentiles_per_band(x: np.ndarray, lo: np.ndarray, hi: np.ndarray
         else:
             x_norm[..., b]= np.clip((band - lo[b]) / (hi[b] - lo[b] + 1e-6), 0, 1)
     
-    out = (x_norm * 254+1).astype(np.uint8)## convertir valores cercanos a 0 a 1 para que no sean tratados como nodata
+    out = (x_norm * 254 + 1).astype(np.uint8)## convertir valores cercanos a 0 a 1 para que no sean tratados como nodata
     
     if nodata_value is not None:
         valid_mask = np.all(x != nodata_value, axis=-1)

@@ -1,40 +1,45 @@
-import subprocess
 import psutil
-import tensorflow as tf
+import torch
 
-def get_nvidia_info_tensorflow():
-    gpu_devices = tf.config.list_physical_devices('GPU')
-    if not gpu_devices:
-        return None
+def get_nvidia_info_torch():
+    # Caso 1: No hay GPU o drivers no instalados
+    if not torch.cuda.is_available():
+        return {
+            "gpu_name": "CPU",
+            "usado_mb": 0,
+            "total_mb": 0,
+            "libre_mb": 0
+        }
     
-    # 1. Nombre (vía TF)
-    details = tf.config.experimental.get_device_details(gpu_devices[0])
-    gpu_name = details.get('device_name', 'Unknown GPU')
-
-    # 2. Memoria usada por la APP (vía TF)
-    # Importante: get_memory_info solo funciona si ya hubo alguna operación de tensores
     try:
-        mem = tf.config.experimental.get_memory_info('GPU:0')
-        usado_app = int(mem['current'] / (1024**2))
-    except ValueError:
-        usado_app = 0 # Aún no se ha usado la memoria
+        device_id = 0
+        gpu_name = torch.cuda.get_device_name(device_id)
 
-    # 3. Memoria Total y Libre del Sistema (vía nvidia-smi)
-    try:
-        res = subprocess.run(
-            ["nvidia-smi", "--query-gpu=memory.total,memory.free", "--format=csv,nounits,noheader"],
-            capture_output=True, text=True, check=True
-        )
-        total, free = res.stdout.strip().split(", ")
+        # Memoria reservada por los tensores de PyTorch
+        usado_app = int(torch.cuda.memory_allocated(device_id) / (1024**2))
+
+        # Propiedades del hardware
+        total_mem = torch.cuda.get_device_properties(device_id).total_memory
+        total_mb = int(total_mem / (1024**2))
+        
+        # Memoria libre real del sistema (VRAM no ocupada por Windows/Apps)
+        free_bytes, _ = torch.cuda.mem_get_info(device_id)
+        libre_mb = int(free_bytes / (1024**2))
+
         return {
             "gpu_name": gpu_name,
             "usado_mb": usado_app,
-            "total_mb": int(total),
-            "libre_mb": int(free)
+            "total_mb": total_mb,
+            "libre_mb": libre_mb
         }
     except Exception as e:
-        print(f"Error al ejecutar nvidia-smi: {e}")
-        return {"gpu_name": gpu_name, "total_mb": 0, "libre_mb": 0}
+        print(f"Error consultando GPU: {e}")
+        return {
+            "gpu_name": "CPU",
+            "usado_mb": 0,
+            "total_mb": 0,
+            "libre_mb": 0
+        }
 
 def get_ram_info():
     ram = psutil.virtual_memory()

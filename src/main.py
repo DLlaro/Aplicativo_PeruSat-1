@@ -3,18 +3,23 @@ import os
 from PySide6.QtWidgets import QApplication
 
 from ui.main_window import MainWindow
-import tensorflow as tf
+import torch
 from logic.utils.config_manager import settings
-from logic.utils.utils import get_nvidia_info_tensorflow
+from logic.utils.utils import get_nvidia_info_torch
 
 def setup_hardware():
-    settings.gpu_info = get_nvidia_info_tensorflow()
-    if settings.use_gpu and settings.gpu_memory_growth:
-        gpus = tf.config.list_physical_devices('GPU')
-        if gpus:
-            for gpu in gpus:
-                tf.config.experimental.set_memory_growth(gpu, True)
-            print("GPU configurada desde preferencias.")
+    # 1. Actualizamos la info de hardware usando la nueva función de Torch
+    settings.gpu_info = get_nvidia_info_torch()
+    
+    # 2. Verificamos si CUDA está disponible según las preferencias
+    if settings.use_gpu and torch.cuda.is_available():
+        gpu_name = settings.gpu_info.get("gpu_name", "NVIDIA")
+        print(f"Hardware configurado: GPU {gpu_name} activa.")
+        
+        # Opcional: Limpiar caché por si acaso hubo una sesión previa
+        torch.cuda.empty_cache()
+    else:
+        print("Hardware configurado: Trabajando en modo CPU.")
 
 if __name__ == "__main__":
     setup_hardware()

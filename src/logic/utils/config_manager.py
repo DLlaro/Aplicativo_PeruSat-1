@@ -72,16 +72,7 @@ class AppConfig:
             print("Error: El valor debe ser un diccionario.")
 
     @property
-    def gpu_memory_growth(self):
-        return str(self.settings.value("gpu/growth", "False")).lower() == "true"
-
-    @gpu_memory_growth.setter
-    def gpu_memory_growth(self, value):
-        self.settings.setValue("gpu/growth", value)
-
-    @property
     def logo_path(self):
-        # Ejemplo de cómo obtener el logo siempre bien
         return os.path.join(self.base_path, "assets", "inei_logo.png")
 
 settings = AppConfig()

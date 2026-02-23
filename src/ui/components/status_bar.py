@@ -39,7 +39,7 @@ class StatusBarManager:
 
 
     def update_roi_area(self, dx, dy, area_km2):
-        self.lbl_coords.setText(f"ROI - Ancho:{dx:.1f} x Alto:{dy:.1f} m | Área:{area_km2:.4f} km²")
+        self.lbl_coords.setText(f"ROI - Ancho: {dx:.1f} x Alto: {dy:.1f} m | Área: {area_km2:.4f} km²")
 
     def show_message(self, msg, timeout=0):
         self.bar.showMessage(msg, timeout)

@@ -2,7 +2,7 @@ from PySide6.QtCore import QThread, Signal
 import random
 from logic.prediccion.roi_tiler import roi_to_tiles
 from logic.image_loader import SatelliteLoader
-from logic.prediccion.prediccion import predict_tiles_multiclase
+from logic.prediccion.predict import predict_tiles_multiclase
 from logic.prediccion.reconstruccion import stitch_tiles_by_class
 from logic.prediccion.to_gpkg import raster_to_vector
 from logic.prediccion.limpiar_archivos import clean_temp_files
