@@ -20,6 +20,8 @@ class AppConfig:
         if getattr(sys, 'frozen', False):
             # Si es un EXE, la base es donde está el ejecutable
             self.base_path = os.path.dirname(sys.executable)
+            os.environ['GDAL_DATA'] = os.path.join(sys._MEIPASS, 'rasterio', 'gdal_data')
+            os.environ['PROJ_LIB'] = os.path.join(sys._MEIPASS, 'rasterio', 'proj_data')
         else:
             # Si es código fuente (.py), la base es la raíz del proyecto
             # Subimos niveles si es necesario según dónde esté este archivo

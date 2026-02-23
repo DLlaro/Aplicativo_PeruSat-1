@@ -8,3 +8,48 @@ QFrame#specs {
 QFrame#specs QLabel {
     padding: 2px;
 }
+
+QFrame#sidebar {
+    background-color: #2b2b2b; 
+    border-left: 1px solid #444;
+    color: black;
+}
+QPushButton#close_btn  {
+    background-color: transparent;
+    color: #888;
+    font-size: 18px;
+    font-weight: bold;
+    border: none;
+}
+/* Container de cada result */
+QFrame#result {
+    background-color: #333333;
+    border: 1px solid #444;
+    border-radius: 4px;
+    margin-bottom: 5px;
+}
+
+/* Titulo Azul dentro del frame de resultados */
+QFrame#result QLabel#title {
+    color: #55aaff;
+    font-size: 10px;
+    font-weight: bold;
+    border: none;
+    background: transparent;
+}
+
+/* El texto dentro del fram de resultados */
+QFrame#result QLabel#value {
+    color: #eeeeee;
+    font-size: 13px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #3d3d3d;
+    background: transparent;
+}
+
+/* Close button hover */
+QPushButton#close_btn:hover {
+    color: white;
+    background-color: #ff5555;
+    border-radius: 4px;
+}

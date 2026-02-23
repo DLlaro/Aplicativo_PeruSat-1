@@ -4,7 +4,8 @@ from PySide6.QtCore import Qt
 from napari.qt import QtViewer
 import os
 
-from constants import LOGO_SIZE, LOGO_FILENAME
+from constants import LOGO_SIZE
+from logic.utils.config_manager import settings
 
 class ViewerPanel(QWidget):
     def __init__(self, viewer_model, base_path):
@@ -26,7 +27,7 @@ class ViewerPanel(QWidget):
         layout.setAlignment(Qt.AlignCenter)
 
         lbl_img = QLabel()
-        logo_path = os.path.join(self.base_path, 'assets', LOGO_FILENAME)
+        logo_path = settings.logo_path
 
         if os.path.exists(logo_path):
             pixmap = QPixmap(logo_path)

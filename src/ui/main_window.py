@@ -1,5 +1,5 @@
 from napari.components import ViewerModel  # <--- LOGICA PURA (Sin GUI)
-from PySide6.QtWidgets import (QMainWindow, QFileDialog, QMessageBox, QInputDialog, QDialog)
+from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QFileDialog, QMessageBox, QInputDialog, QDialog)
 from PySide6.QtGui import QIcon
 import os
 from tensorflow import keras
@@ -19,6 +19,7 @@ from logic.load_worker import LoadWorker
 from ui.components.viewer_panel import ViewerPanel
 from ui.components.toolbar import AppToolbar
 from ui.components.status_bar import StatusBarManager
+from ui.components.sidebar import SideBarManager
 
 from ui.handlers.mouse_handler import MouseHandler
 from ui.handlers.keyboard_handler import KeyboardHandler
@@ -33,18 +34,33 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("PeruSat-1 Modular v0.2")
         self.resize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
 
-        self.setWindowIcon(QIcon(settings.base_path))
+        self.setWindowIcon(QIcon(settings.logo_path))
 
         # Instancias Lógicas
         self.loader = SatelliteLoader()
         self.viewer_model= ViewerModel()
 
+        self.container = QWidget()
+        self.main_layout = QHBoxLayout(self.container)
+        self.main_layout.setContentsMargins(0,0,0,0)
+        self.main_layout.setSpacing(0)
+        self.setCentralWidget(self.container)
+
         # Componentes
         self.viewer_panel = ViewerPanel(self.viewer_model, settings.base_path)
-        self.setCentralWidget(self.viewer_panel)                # setup_ui()
         self.toolbar = AppToolbar(parent=self)      # parent permite self.style()
         self.addToolBar(self.toolbar)                         # setup_toolbar()
         self.status_mgr = StatusBarManager(self.statusBar())   # setup_status_bar()
+
+        self.sidebar_mgr = SideBarManager()
+        ## Adding them to horizontal layout
+        self.main_layout.addWidget(self.viewer_panel)
+        self.main_layout.addWidget(self.sidebar_mgr.sidebar)
+
+        # Ensure viewer takes up all space, sidebar takes only what it needs
+        self.main_layout.setStretch(0, 1) # Viewer expands
+        self.main_layout.setStretch(1, 0) # Sidebar stays fixed
+        
 
         # Handlers
         self.mouse_handler = MouseHandler(self)                 # mouse callbacks
@@ -228,15 +244,14 @@ class MainWindow(QMainWindow):
         print("Nueva imagen cargada correctamente.")
     
     def limpiar_visor(self):
-        """Elimina todas las capas (Imagen y Shapes) y resetea la cámara"""
-        # 1. Eliminar todas las capas (Imagen previa, ROIs, etiquetas, etc.)
         self.viewer_model.layers.clear()
-        
-        # 2. Resetear referencias internas
         self.roi_manager.limpiar()
-        QCoreApplication.processEvents() # Let Qt finish deleting the visuals
-        gc.collect()# Liberate ram
-        print("Visor limpiado.", flush=True)
+        
+        # Esto ahora es seguro y no causará Access Violation
+        self.sidebar_mgr.limpiar()
+        
+        # Opcional: solo si ves que la RAM no baja tras muchas imágenes
+        # gc.collect()
 
     def toggle_modo_roi(self):
         if self.archivo_cargado:
@@ -257,6 +272,11 @@ class MainWindow(QMainWindow):
         2. Extrae coordenadas y datos
         3. Ejecuta inferencia con PyTorch
         """
+        self.sidebar_mgr.show_sidebar()
+        self.sidebar_mgr.add_result("Adasdas", "asdasdasdsasd")
+        self.sidebar_mgr.add_result("Adasdas", "asdasdasdsasd")
+        self.sidebar_mgr.add_result("Adasdas", "asdasdasdsasd")
+        self.sidebar_mgr.add_result("Adasdas", "asdasdasdsasd")
         try:
             # Validar ROI
             es_valido, mensaje = self.roi_manager.validar_roi(
@@ -311,25 +331,33 @@ class MainWindow(QMainWindow):
                     )
                     self.status_mgr.show_message("Carpeta Inválida")
                     return None
-                self.workerTiler = LoadWorker(base_project_path=settings.base_path, 
-                                              file_path=self.loader.path,
-                                              loader = self.loader,
-                                              coords=self.roi_manager.coords, 
-                                              mode='tiling',
-                                              modelo = self.model, 
-                                              output_dir=analyze_dlg.selected_path)
-                self.status_mgr.show_progress()
 
-                self.workerTiler.progress_update.connect(self.status_mgr.update_progress)# progress for loading model (infinite bar progress)
+                
 
-                self.workerTiler.error.connect(lambda msg: QMessageBox.critical(self, "Error", msg))
-                self.workerTiler.finished.connect(self._mostrar_resultado_analisis)
+                
+                # self.workerTiler = LoadWorker(base_project_path=settings.base_path, 
+                #                               file_path=self.loader.path,
+                #                               loader = self.loader,
+                #                               coords=self.roi_manager.coords, 
+                #                               mode='tiling',
+                #                               modelo = self.model, 
+                #                               output_dir=analyze_dlg.selected_path)
+                # self.status_mgr.show_progress()
 
-                self.toolbar.set_all_enabled(False)
+                # self.workerTiler.progress_update.connect(self.status_mgr.update_progress)# progress for loading model (infinite bar progress)
 
-                #Desactivar el modo_dibujo
-                self.toggle_modo_roi()
-                self.workerTiler.start()
+                # self.workerTiler.error.connect(lambda msg: QMessageBox.critical(self, "Error", msg))
+                # self.workerTiler.finished.connect(self._mostrar_resultado_analisis)
+
+                # self.toolbar.set_all_enabled(False)
+
+                # #Desactivar el modo_dibujo
+                # self.toggle_modo_roi()
+                # self.workerTiler.start()
+
+
+
+                
 
                 # TODO: inferencia real con PyTorch
                 # resultado = self.modelo.eval(...)
