@@ -24,7 +24,7 @@ def predict_tiles_multiclase(input_dir, output_dir, model, progress_callback = N
         return
 
     # Configuración de hardware
-    device = torch.device('cuda' if torch.cuda.is_available() and settings.use_gpu else 'cpu')
+    device = settings.torch_device
     model.to(device)
     model.eval() # Modo evaluación
     
@@ -73,7 +73,7 @@ def predict_tiles_multiclase(input_dir, output_dir, model, progress_callback = N
             tile_count += 1
             if progress_callback:
                 progress = int((tile_count / total_tiles) * 100)
-                progress_callback(progress, 100, f"Procesando {tile_count}/{total_tiles}")
+                progress_callback(progress, f"Procesando {tile_count}/{total_tiles}")
 
         except Exception as e:
             print(f"Error procesando {os.path.basename(image_path)}: {str(e)}")

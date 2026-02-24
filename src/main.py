@@ -2,6 +2,16 @@ import sys
 import os
 from PySide6.QtWidgets import QApplication
 
+if getattr(sys, 'frozen', False):
+    if sys.platform == 'win32':
+        # Registrar el directorio donde están las DLLs dentro del paquete
+        os.add_dll_directory(sys._MEIPASS)
+        # Específicamente para las carpetas forzadas
+        for lib in ['pyogrio', 'torch/lib']:
+            p = os.path.join(sys._MEIPASS, lib)
+            if os.path.exists(p):
+                os.add_dll_directory(p)
+
 from ui.main_window import MainWindow
 import torch
 from logic.utils.config_manager import settings
@@ -26,13 +36,12 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     # Cargar QSS desde assets
-    qss_path = os.path.join(settings.base_path, "assets", "styles", "style.qss")
-    if os.path.exists(qss_path):
-        with open(qss_path, "r", encoding="utf-8") as f:
+    if os.path.exists(settings.qss_path):
+        with open(settings.qss_path, "r", encoding="utf-8") as f:
             app.setStyleSheet(f.read())
-        print(f"QSS cargado exitosamente desde: {qss_path}")
+        print(f"QSS cargado exitosamente desde: {settings.qss_path}")
     else:
-        print(f"ERROR: No se encontró el QSS en: {qss_path}")
+        print(f"ERROR: No se encontró el QSS en: {settings.qss_path}")
     window = MainWindow()
     window.show()
     

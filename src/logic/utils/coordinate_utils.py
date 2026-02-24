@@ -54,7 +54,14 @@ def rectangle_to_coords(layer, scale_factor) -> tuple[float, float, float, float
         Returns:
             tuple: (real_x, real_y, real_w, real_h)
         """
-        shape_data = layer.data[-1]
+        if layer is None:
+                return None
+        
+        data = layer.data
+        if not data or len(data) == 0:
+                return None
+        
+        shape_data = data[-1]
         shape_data = np.array(shape_data)
 
         # shape_data tiene forma (n_vertices, 2) donde cada fila es [y, x]

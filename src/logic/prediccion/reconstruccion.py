@@ -80,13 +80,13 @@ def stitch_tiles_by_class(tif_name: str,
 
         if progress_callback:
             progress = int(((i + 1) / num_tiles) * 100)
-            progress_callback(progress, 100, f"Reconstruyendo el ROI")
+            progress_callback(progress, f"Reconstruyendo el ROI")
 
     # Reconstruir la transformación de Rasterio
     transform = Affine(*meta["transform"][:6])
 
     # Guardar cada clase por separado
-    progress_callback(0, 100, "Separando clases (TIFF):")
+    progress_callback(0, 100, "Separando clases:")
     os.makedirs(output_dir, exist_ok=True)
     count = 1
     for c in range(1,num_classes):# clases de 1 al 2 (solo roads y buildings)
@@ -107,4 +107,4 @@ def stitch_tiles_by_class(tif_name: str,
 
         if progress_callback:
             progress = int((count / len(range(1,num_classes))) * 100)
-            progress_callback(progress, 100, f"Separando clases (TIFF):")
+            progress_callback(progress, f"Separando clases:")

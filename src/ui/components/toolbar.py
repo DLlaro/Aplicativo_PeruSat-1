@@ -44,7 +44,7 @@ class AppToolbar(QToolBar):
         self.action_config.setEnabled(True)
 
     def _setup(self):
-        self.addAction(self.action_open)        # self IS the toolbar
+        self.addAction(self.action_open)
         self.addSeparator()
         self.addAction(self.action_roi)
         self.addSeparator()
@@ -53,11 +53,7 @@ class AppToolbar(QToolBar):
         self.addAction(self.action_reset)
         self.addSeparator()
         self.addAction(self.action_config)
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
+        
     def set_roi_checked(self, activo: bool):
         self.action_roi.setChecked(activo)
         self.action_roi.setText("ROI: Activo (Esc)" if activo else "Seleccionar ROI")

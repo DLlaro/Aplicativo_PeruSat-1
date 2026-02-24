@@ -32,7 +32,7 @@ class MouseHandler:
         """
         # 1. Validación básica
         if not self.mw.viewer_model.layers:
-            self.mw.status_mgr.lbl_coords.setText("Sin imagen")
+            self.mw.status_mgr.lbl_coords.setText("Coords: - , -")
             return
             
         try:

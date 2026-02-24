@@ -5,6 +5,50 @@ from torch.optim import lr_scheduler
 
 
 class BuildingRoadModel(nn.Module):
+    """
+    Modelo de segmentación semántica multiclase para detección de edificios y vías.
+
+    Envuelve una arquitectura de `segmentation_models_pytorch` (smp) e incorpora
+    el ciclo de entrenamiento, validación y prueba compatible con PyTorch Lightning.
+    Normaliza las imágenes internamente usando los parámetros del encoder seleccionado
+    y guarda en memoria el mejor estado del modelo según la pérdida de validación.
+
+    Args
+    ----------
+    arch: str
+        Nombre de la arquitectura smp, ej: "Unet", "FPN", "DeepLabV3Plus"
+    encoder_name: str
+        Nombre del encoder/backbone, ej: "resnet34", "efficientnet-b4".
+    in_channels: int
+        Número de canales de entrada, ej: 3 para RGB.
+    out_classes: int
+        Número de clases de salida (incluyendo fondo si aplica).
+    **kwargs
+        Argumentos adicionales pasados a `smp.create_model`.
+
+    Attributes
+    ---------
+    model: nn.Module
+        Sub-modelo smp instanciado con la arquitectura y encoder indicados.
+    number_of_classes : int
+        Número de clases de salida.
+    loss_fn: smp.losses.JaccardLoss
+        Función de pérdida Jaccard multiclase con ignore_index=255.
+    best_val_loss: float
+        Mejor pérdida de validación registrada durante el entrenamiento.
+    best_model_state_dict: dict | None
+        Copia en CPU del state_dict correspondiente a `best_val_loss`.
+    mean, std: torch.Tensor
+        Buffers de normalización del encoder, shape (1, 3, 1, 1).
+
+    Notes
+    -----
+    - La normalización se aplica internamente en `forward`, por lo que las
+      imágenes de entrada deben estar en rango [0, 1] sin normalizar.
+    - Los píxeles con etiqueta 255 son ignorados en la pérdida y en las métricas.
+    - Para acceder a métricas por clase, define `self.class_names` como una lista
+      de strings antes del entrenamiento, ej: ["background", "building", "road"].
+    """
     def __init__(self, arch, encoder_name, in_channels, out_classes, **kwargs):
         super().__init__()
         self.model = smp.create_model(
@@ -38,12 +82,43 @@ class BuildingRoadModel(nn.Module):
 
 
     def forward(self, image):
-        # Normalize image
+        """
+        Normaliza la imagen y calcula los logits de segmentación.
+
+        Args
+        ----------
+        image : torch.Tensor
+            Tensor de shape (B, C, H, W) en rango [0, 1].
+
+        Return
+        -------
+        torch.Tensor
+            Logits crudos de shape (B, out_classes, H, W).
+        """
         image = (image - self.mean) / self.std
         mask = self.model(image)
         return mask
 
     def shared_step(self, batch, stage):
+        """
+        Ejecuta un paso de forward + cálculo de pérdida y métricas para un batch.
+
+        Ignora los píxeles con etiqueta 255 al calcular tp/fp/fn/tn. Si todos
+        los píxeles del batch son ignorados (bloque negro), retorna tp=None
+        para que `shared_epoch_end` lo filtre correctamente.
+
+        args
+        ----------
+        batch : tuple[torch.Tensor, torch.Tensor]
+            Par (image, mask) donde image es (B, C, H, W) y mask es (B, H, W).
+        stage : str
+            Prefijo para el logging, ej: "train", "valid", "test".
+
+        return
+        -------
+        dict: 
+            "loss", "tp", "fp", "fn", "tn". tp/fp/fn/tn son None si no hubo píxeles válidos en el batch.
+        """
         image, mask = batch
 
         # Ensure that image dimensions are correct
@@ -67,8 +142,6 @@ class BuildingRoadModel(nn.Module):
 
         # Compute loss using multi-class Dice loss (pass original mask, not one-hot encoded)
         loss = self.loss_fn(logits_mask, mask)
-
-        self.log(f"{stage}_loss", loss, prog_bar=True, on_step=False, on_epoch=True)
 
         # Apply softmax to get probabilities for multi-class segmentation
         prob_mask = logits_mask.softmax(dim=1)
@@ -97,15 +170,31 @@ class BuildingRoadModel(nn.Module):
             "tn": tn,
         }
 
-
     def shared_epoch_end(self, outputs, stage):
-        # promedio de loss SIEMPRE (incluye batches todo-ignore)
+        """
+        Agrega las métricas de todos los steps de una época y las loguea.
+
+        Filtra los outputs con tp=None (batches de píxeles ignorados) antes
+        de concatenar. Loguea IoU y F1 globales y por clase si `self.class_names`
+        está definido.
+
+        args
+        ----------
+        outputs : list[dict]
+            Lista de dicts retornados por `shared_step` durante la época.
+        stage : str
+            Prefijo para el logging, ej: "train", "valid", "test".
+
+        return
+        -------
+        torch.Tensor
+            Pérdida promedio de la época (scalar), usada para comparar
+            con `best_val_loss` en `on_validation_epoch_end`.
+        """
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
 
-        # filtra los que sí tienen métricas
         metric_outputs = [x for x in outputs if x["tp"] is not None]
         if len(metric_outputs) == 0:
-            # no hubo píxeles válidos en toda la epoch
             return avg_loss
 
         tp = torch.cat([x["tp"] for x in metric_outputs])
@@ -114,47 +203,24 @@ class BuildingRoadModel(nn.Module):
         tn = torch.cat([x["tn"] for x in metric_outputs])
 
         per_image_iou = smp.metrics.iou_score(tp, fp, fn, tn, reduction="micro-imagewise")
-        dataset_iou = smp.metrics.iou_score(tp, fp, fn, tn, reduction="micro")
-
-        self.log_dict({
-            f"{stage}_per_image_iou": per_image_iou,
-            f"{stage}_dataset_iou": dataset_iou,
-        }, prog_bar=True)
-
-        return avg_loss
-###############
-    def shared_epoch_end(self, outputs, stage):
-        # Aggregate step metrics
-        tp = torch.cat([x["tp"] for x in outputs], dim=0)
-        fp = torch.cat([x["fp"] for x in outputs], dim=0)
-        fn = torch.cat([x["fn"] for x in outputs], dim=0)
-        tn = torch.cat([x["tn"] for x in outputs], dim=0)
-
-        # --------- IoU por clase (vector de tamaño C) ----------
+        dataset_iou   = smp.metrics.iou_score(tp, fp, fn, tn, reduction="micro")
         iou_per_class = smp.metrics.iou_score(tp, fp, fn, tn, reduction="none")
-        # --------- F1 por clase (Dice/F1) ----------
-        f1_per_class = smp.metrics.f1_score(tp, fp, fn, tn, reduction="none")
-
-        # (Mantén también tus métricas globales si quieres)
-        per_image_iou = smp.metrics.iou_score(tp, fp, fn, tn, reduction="micro-imagewise")
-        dataset_iou = smp.metrics.iou_score(tp, fp, fn, tn, reduction="micro")
+        f1_per_class  = smp.metrics.f1_score(tp, fp, fn, tn, reduction="none")
 
         metrics = {
             f"{stage}_per_image_iou": per_image_iou,
-            f"{stage}_dataset_iou": dataset_iou,
+            f"{stage}_dataset_iou":   dataset_iou,
+
         }
 
-        # Log por clase
         for c in range(self.number_of_classes):
             cname = self.class_names[c] if hasattr(self, "class_names") else f"class_{c}"
             metrics[f"{stage}_iou_{cname}"] = iou_per_class[c]
-            metrics[f"{stage}_f1_{cname}"] = f1_per_class[c]
+            metrics[f"{stage}_f1_{cname}"]  = f1_per_class[c]
+            metrics[f"{stage}_loss"] = avg_loss
 
         self.log_dict(metrics, prog_bar=True, on_epoch=True, on_step=False)
-
-
-########################
-
+        return avg_loss
 
     def training_step(self, batch, batch_idx):
         train_loss_info = self.shared_step(batch, "train")
@@ -191,18 +257,43 @@ class BuildingRoadModel(nn.Module):
         self.test_step_outputs.clear()
 
     def configure_optimizers(self):
+        """
+        Configura el optimizador y el scheduler de tasa de aprendizaje.
+
+        Optimizador : Adam con lr=2e-4.
+        Scheduler   : CosineAnnealingLR con T_max=50, eta_min=1e-5,
+                      ejecutado por época (interval='epoch').
+
+        return
+        ----------
+        dict:
+            compatible con PyTorch Lightning con claves
+            'optimizer' y 'lr_scheduler'.
+        """
         optimizer = torch.optim.Adam(self.parameters(), lr=2e-4)
         scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=1e-5)
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "interval": "step",
+                "interval": "epoch",
                 "frequency": 1,
             },
         }
 
     def save_best_model(self, filepath):
+        """
+        Guarda el mejor state_dict registrado durante el entrenamiento en disco.
+
+        El checkpoint guardado contiene:
+            - 'state_dict' : pesos del mejor modelo (en CPU).
+            - 'best_val_loss' : pérdida de validación asociada.
+
+        args
+        ----------
+        filepath : str
+            Ruta completa del archivo de destino, ej: "checkpoints/best.pt".
+        """
         if self.best_model_state_dict is not None:
             torch.save({
                 'state_dict': self.best_model_state_dict,
@@ -213,6 +304,13 @@ class BuildingRoadModel(nn.Module):
             print("No best model available to save. Training may not have started yet.")
 
     def load_best_model(self):
+        """
+        Restaura el modelo al mejor state_dict guardado en memoria.
+
+        No lee desde disco; usa `self.best_model_state_dict` almacenado
+        en RAM durante el entrenamiento. Si no hay estado guardado
+        (entrenamiento no iniciado), imprime un aviso y no hace nada.
+        """
         if self.best_model_state_dict is not None:
             self.load_state_dict(self.best_model_state_dict)
             print(f"Loaded best model with validation loss: {self.best_val_loss:.4f}")

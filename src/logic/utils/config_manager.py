@@ -2,6 +2,7 @@ from PySide6.QtCore import QSettings
 import os
 import json
 import sys
+import torch
 
 class AppConfig:
     _instance = None
@@ -16,21 +17,21 @@ class AppConfig:
         if self._initialized:
             return
 
-        # --- DETECTOR DE RUTA
+        # --- GESTIÓN DE RUTAS ---
         if getattr(sys, 'frozen', False):
-            # Si es un EXE, la base es donde está el ejecutable
+            # En el EXE: base_path es la carpeta donde está el ejecutable (para el .ini)
             self.base_path = os.path.dirname(sys.executable)
-            os.environ['GDAL_DATA'] = os.path.join(sys._MEIPASS, 'rasterio', 'gdal_data')
-            os.environ['PROJ_LIB'] = os.path.join(sys._MEIPASS, 'rasterio', 'proj_data')
+            # internal_path es donde están los assets y el código (sys._MEIPASS)
+            self.internal_path = sys._MEIPASS 
         else:
-            # Si es código fuente (.py), la base es la raíz del proyecto
-            # Subimos niveles si es necesario según dónde esté este archivo
+            # En desarrollo (.py): ambas son la raíz del proyecto
             self.base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+            self.internal_path = self.base_path
 
-        # El config.ini siempre debe estar al lado del ejecutable para que sea persistente
+        # El config.ini se guarda siempre fuera del paquete para ser persistente
         ruta_config = os.path.join(self.base_path, "config.ini")
-        
         self.settings = QSettings(ruta_config, QSettings.IniFormat)
+        
         print(f"Configuración cargada desde: {ruta_config}")
         self._initialized = True
 
@@ -61,6 +62,11 @@ class AppConfig:
             return json.loads(data_str)
         except (json.JSONDecodeError, TypeError):
             return {}
+        
+    @property
+    def torch_device(self):
+        return torch.device('cuda' if torch.cuda.is_available() and settings.use_gpu else 'cpu')
+
 
     @gpu_info.setter
     def gpu_info(self, value):
@@ -73,6 +79,10 @@ class AppConfig:
 
     @property
     def logo_path(self):
-        return os.path.join(self.base_path, "assets", "inei_logo.png")
+        return os.path.join(self.internal_path, "assets", "inei_logo.png")
+    
+    @property
+    def qss_path(self):
+        return os.path.join(self.internal_path, "assets", "styles", "style.qss")
 
 settings = AppConfig()

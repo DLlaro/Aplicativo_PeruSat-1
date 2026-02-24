@@ -20,7 +20,7 @@ def raster_to_vector(mask_path: str, out_dir: str, background_value: int = 0, pr
     count = 0
 
     if progress_callback:
-        progress_callback(0, 100, "Vectorizando...")
+        progress_callback(0, "Vectorizando...")
 
     path_list = []
 
@@ -51,6 +51,6 @@ def raster_to_vector(mask_path: str, out_dir: str, background_value: int = 0, pr
 
         if progress_callback:
                 progress = int((count / len(glob.glob(f"{mask_path}/*.tif"))) * 100)
-                progress_callback(progress, 100, f"Reconstruyendo el ROI:")
+                progress_callback(progress, f"Generando capa vectorial:")
 
     return path_list

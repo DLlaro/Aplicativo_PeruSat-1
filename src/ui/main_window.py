@@ -1,11 +1,11 @@
 from napari.components import ViewerModel  # <--- LOGICA PURA (Sin GUI)
-from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QFileDialog, QMessageBox, QInputDialog, QDialog)
+from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QFileDialog, QMessageBox, QDialog)
 from PySide6.QtGui import QIcon
 import gc
 
 # Importar la logica
 from logic.image_loader import SatelliteLoader
-from logic.load_worker import LoadWorker
+from logic.workers import LoadImageWorker, MetadataWorker, TilingWorker
 from logic.utils.config_manager import settings
 from logic.modelo.model_utils import cargar_recargar_modelo
 
@@ -29,16 +29,25 @@ from constants import (DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, MSG_ROI_ACTI
 
 class MainWindow(QMainWindow):
     def __init__(self):
+        """
+        Ventana principal del aplicativo.
+        Instacia el image loader, viewer loader.
+        Crea los componentes Viewer Panel, Toolbar, StatusBar, SideBar.
+        Instancia el ROI Manager.
+        Instancia el MouseHandler, KeyboardHandler.
+        Conecta las señales y setea los flags.
+        """
         super().__init__()
         self.setWindowTitle("PeruSat-1 Modular v0.2")
         self.resize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
 
         self.setWindowIcon(QIcon(settings.logo_path))
 
-        # Instancias Lógicas
+        # Logica
         self.loader = SatelliteLoader()
         self.viewer_model= ViewerModel()
-
+        
+        # Contenedor principal
         self.container = QWidget()
         self.main_layout = QHBoxLayout(self.container)
         self.main_layout.setContentsMargins(0,0,0,0)
@@ -47,34 +56,31 @@ class MainWindow(QMainWindow):
 
         # Componentes
         self.viewer_panel = ViewerPanel(self.viewer_model, settings.base_path)
-        self.toolbar = AppToolbar(parent=self)      # parent permite self.style()
-        self.addToolBar(self.toolbar)                         # setup_toolbar()
-        self.status_mgr = StatusBarManager(self.statusBar())   # setup_status_bar()
-
+        self.toolbar = AppToolbar(parent=self)
+        self.addToolBar(self.toolbar)
+        self.status_mgr = StatusBarManager(self.statusBar())
         self.sidebar_mgr = SideBarManager()
-        ## Adding them to horizontal layout
+
         self.main_layout.addWidget(self.viewer_panel)
         self.main_layout.addWidget(self.sidebar_mgr.sidebar)
-
-        # Ensure viewer takes up all space, sidebar takes only what it needs
         self.main_layout.setStretch(0, 1) # Viewer expands
         self.main_layout.setStretch(1, 0) # Sidebar stays fixed
         
-
-        # Handlers
-        self.mouse_handler = MouseHandler(self)                 # mouse callbacks
-        self.keyboard_handler = KeyboardHandler(self)          # shortcuts
-
-        # Managers
+        # Managers que depende de UI
         self.roi_manager = ROIManager(
             self.viewer_model, 
             onToggleCallback=self.toggle_checked_roi,
             onDataChanged=self.existe_poligono
         )
 
+        # Handlers
+        self.mouse_handler = MouseHandler(self)                 # mouse callbacks
+        self.keyboard_handler = KeyboardHandler(self)          # shortcuts
+
+        # Señales
         self._connect_signals()
 
-        # Flags
+        # Flags y estado inicial
         self.archivo_cargado = False
         self.modelo_cargado = False
 
@@ -84,27 +90,30 @@ class MainWindow(QMainWindow):
         self.modelo_cargado = exito
         self.status_mgr.show_message(msg, TIMEOUT_LONG if exito else TIMEOUT_MEDIUM)
 
-    def toggle_checked_roi(self, is_active: bool):
+    def toggle_checked_roi(self, is_active: bool) -> None:
+        """
+        Alterna entre marcar y desmarcar la opcion de ROI
+        """
         self.toolbar.set_roi_checked(is_active)        # setText happens inside here
         if is_active:
             self.status_mgr.show_message(MSG_ROI_ACTIVE)
-        else:
-            self.status_mgr.show_message(MSG_IMAGE_LOADED, TIMEOUT_MEDIUM)
 
     def existe_poligono(self, tiene_datos: bool):
         """
         Este método recibe True o False desde el ROIManager
         Habilita o deshabilita el boton analizar si hay poligono
+
+        Args
+        ----------
+        tiene_datos: bool
+            La capa de datos tiene una área de interés dibujada?
         """
         self.toolbar.set_analyze_enabled(tiene_datos)
         self.toolbar.set_reset_enabled(tiene_datos)
         if tiene_datos:
             self.status_mgr.show_message(MSG_ROI_READY, TIMEOUT_MEDIUM)
-        else:
-            self.status_mgr.show_message("Dibuje un área para analizar.", TIMEOUT_MEDIUM)
 
     def _connect_signals(self):
-        # Solo conexiones de alto nivel
         self.toolbar.action_open.triggered.connect(self.abrir_archivo)
         self.toolbar.action_roi.triggered.connect(self.toggle_modo_roi)
         self.toolbar.action_analyze.triggered.connect(self.analizar_imagen)
@@ -132,7 +141,6 @@ class MainWindow(QMainWindow):
             self.status_mgr.setEPSG(self.loader.crs)
             self.toolbar.set_open_enabled(True)
             self.status_mgr.setEscala(f"{1/self.loader.scale_factor:.1f}")
-            self.status_mgr.show_message("Imagen lista para analizar", TIMEOUT_LONG)
             self.status_mgr.hide_progress()
 
     @property
@@ -146,6 +154,10 @@ class MainWindow(QMainWindow):
 
 
     def abrir_archivo(self):
+        """
+        Abre un explorador de archivos para seleccionar el tif.
+        Instancia un worker para cargar la imagen.
+        """
         raster_path, _ = QFileDialog.getOpenFileName(
             self, "Abrir Raster","", "GeoTIFF (*.tif *.tiff)",
         )
@@ -153,22 +165,29 @@ class MainWindow(QMainWindow):
         if not raster_path:
             return # El usuario canceló el explorador
         
-        self.workerMetadata = LoadWorker(file_path = raster_path, loader = self.loader , mode = 'metadata')
-        self.workerMetadata.finished.connect(lambda shape: self.mostrar_load_dialog(raster_path, height = shape[0], width = shape[1]))
+        self.workerMetadata = MetadataWorker(loader = self.loader, file_path = raster_path)
+        self.workerMetadata.finished.connect(lambda shape: self.mostrar_load_dialog(shape))
         self.workerMetadata.error.connect(lambda msg: QMessageBox.critical(self, "Error", msg))
         self.workerMetadata.start()
         
+    def mostrar_load_dialog(self, shape : tuple):
+        """
+        Mostrar cuadro de dialogo con la configuracion para cargar el raster.
 
-    def mostrar_load_dialog(self, raster_path, width = 0, height = 0):
-        #Show custom dialog
-        dialog = LoadDialog(self, width, height)
+        Args
+        ----------
+        width: 
+        """
+        self.status_mgr.show_message(f"Procesando imagen de {shape[1]}x{shape[0]} px...")
+
+        dialog = LoadDialog(self, shape)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             escala = dialog.get_values()
-            self.cargar_en_visor(raster_path, escala)
+            self.cargar_en_visor(escala)
         else:
             print("Carga cancelada.")
 
-    def cargar_en_visor(self, ruta_archivo, input_escala):
+    def cargar_en_visor(self, input_escala):
         self.archivo_cargado = False
         try:
             # --- limpiar visor ---
@@ -180,17 +199,11 @@ class MainWindow(QMainWindow):
             self.status_mgr.update_progress(0, "Cargando Imagen")
 
             # Creamos el hilo
-            self.worker = LoadWorker(ruta_archivo, base_project_path=settings.base_path, loader = self.loader, escala = input_escala, mode = 'load')
+            self.worker = LoadImageWorker(loader = self.loader, escala = input_escala)
             
             self.worker.progress_update.connect(self.status_mgr.update_progress)
             # Conectamos la señal al nuevo método de ventana emergente
             self.worker.status_msg.connect(lambda msg: QMessageBox.warning(self, "Optimizacion de Escala", msg, QMessageBox.StandardButton.Ok) )
-
-            # ACTUALIZACIÓN INSTANTÁNEA: 
-            # En cuanto el hilo abre el archivo (ms), cambia la barra de estado
-            self.worker.metadata_ready.connect(
-                lambda w, h: self.status_mgr.show_message(f"Procesando imagen de {w}x{h} px...")
-            )
 
             # CUANDO TERMINA EL PROCESO PESADO:
             self.worker.finished.connect(self.finalizar_carga_img)
@@ -232,18 +245,15 @@ class MainWindow(QMainWindow):
         # Opcional: solo si ves que la RAM no baja tras muchas imágenes
         gc.collect()
 
-    def toggle_modo_roi(self):
-        if self.archivo_cargado:
-            self.roi_manager.activar_herramienta()
-        else:
-            QMessageBox.warning(
-                    self,
-                    "Cargar Imagen",
-                    "Cargar una imagen para realizar el trazado del ROI"
-                )
-            self.status_mgr.show_message("ROI inválido - ajusta la selección")
-            return None
+    def toggle_modo_roi(self, activar: bool | None = None) -> None:
+        """Alternar el modo de dibujo de ROI."""
+        if not self.archivo_cargado:
+            QMessageBox.warning(self, "Cargar Imagen", "Carga una imagen para trazar el ROI.")
+            self.status_mgr.show_message("No hay imagen cargada.")
+            return
 
+        self.roi_manager.activar_herramienta(activar)
+    
     def analizar_imagen(self):
         """
         Analiza la región de interés (ROI) seleccionada:
@@ -251,47 +261,14 @@ class MainWindow(QMainWindow):
         2. Extrae coordenadas y datos
         3. Ejecuta inferencia con PyTorch
         """
-        self.sidebar_mgr.show_sidebar()
-        self.sidebar_mgr.add_result("Adasdas", "asdasdasdsasd")
-        self.sidebar_mgr.add_result("Adasdas", "asdasdasdsasd")
-        self.sidebar_mgr.add_result("Adasdas", "asdasdasdsasd")
-        self.sidebar_mgr.add_result("Adasdas", "asdasdasdsasd")
         try:
-            # Validar ROI
             es_valido, mensaje = self.roi_manager.validar_roi(
                 min_area_km2 = MIN_AREA_KM2, 
                 original_shape = self.loader.get_original_shape()
             )
 
             if not es_valido:
-                if "pequeño" in mensaje:
-                    # ROI pequeño => ofrecer continuar de todas formas
-                    msgBox = QMessageBox(self)
-                    msgBox.setIcon(QMessageBox.Icon.Warning)
-                    msgBox.setWindowTitle("ROI Pequeño")
-                    msgBox.setText(mensaje)
-                    
-                    # Botones estándar
-                    msgBox.setStandardButtons(QMessageBox.StandardButton.Cancel)
-                    
-                    # botón personalizado
-                    btn_continuar = msgBox.addButton("Continuar de todas formas", QMessageBox.ButtonRole.AcceptRole)
-                    
-                    result = msgBox.exec()
-                    
-                    # Verificar qué botón se presionó
-                    if msgBox.clickedButton() == btn_continuar:
-                        print("Continuar con ROI pequeño")
-                        # Continuar con el análisis
-                    else:
-                        # cancelar análisis
-                        self.status_mgr.show_message("Operación cancelada")
-                        return None
-                
-                else:
-                    # Otros errores de validación → solo advertencia
-                    QMessageBox.warning(self, "ROI Inválido", mensaje)
-                    self.status_mgr.show_message("ROI inválido - ajusta la selección")
+                if not self._handle_roi_invalido(mensaje):
                     return None
 
             if not self.modelo_cargado:
@@ -310,35 +287,49 @@ class MainWindow(QMainWindow):
                     )
                     self.status_mgr.show_message("Carpeta Inválida")
                     return None
-
-                self.workerTiler = LoadWorker(base_project_path=settings.base_path, 
-                                              file_path=self.loader.path,
-                                              loader = self.loader,
-                                              coords=self.roi_manager.coords, 
-                                              mode='tiling',
-                                              modelo = self.model, 
-                                              output_dir=analyze_dlg.selected_path)
+                
                 self.status_mgr.show_progress()
+                self.toolbar.set_all_enabled(False)
+                self.toggle_modo_roi(False)
 
-                self.workerTiler.progress_update.connect(self.status_mgr.update_progress)# progress for loading model (infinite bar progress)
-
+                self.workerTiler = TilingWorker(loader = self.loader,
+                                                coords=self.roi_manager.coords,
+                                                modelo = self.model, 
+                                                output_dir=analyze_dlg.selected_path)
+                self.workerTiler.progress_update.connect(self.status_mgr.update_progress)
                 self.workerTiler.error.connect(lambda msg: QMessageBox.critical(self, "Error", msg))
                 self.workerTiler.finished.connect(self._mostrar_resultado_analisis)
-
-                self.toolbar.set_all_enabled(False)
-
-                #Desactivar el modo_dibujo
-                self.toggle_modo_roi()
                 self.workerTiler.start()
 
-                # TODO: inferencia real con PyTorch
-                # resultado = self.modelo.eval(...)
-                #image_to_tiles(self.base_path, )
-                        
         except Exception as e:
             QMessageBox.critical(self, "Error de Análisis", 
                             f"Error durante el análisis:\n{str(e)}")
     
+    def _handle_roi_invalido(self, mensaje: str) -> bool:
+        """
+        Maneja los errores de validación del ROI.
+
+        Retorna
+        -------
+        bool
+            True  → continuar con el análisis.
+            False → cancelar.
+        """
+        if "insuficiente" in mensaje:
+            msgBox = QMessageBox(self)
+            msgBox.setIcon(QMessageBox.Icon.Warning)
+            msgBox.setWindowTitle("ROI Pequeño")
+            msgBox.setText(mensaje)
+            msgBox.setStandardButtons(QMessageBox.StandardButton.Cancel)
+            btn_continuar = msgBox.addButton("Continuar de todas formas", QMessageBox.ButtonRole.AcceptRole)
+            msgBox.exec()
+
+            return msgBox.clickedButton() == btn_continuar
+
+        QMessageBox.warning(self, "ROI Inválido", mensaje)
+        self.status_mgr.show_message("ROI inválido - ajusta la selección")
+        return False
+
     def select_directory(self, titulo="Seleccionar Carpeta", ruta_inicial=""):
         """
         Abre un diálogo para seleccionar una carpeta.
@@ -393,6 +384,6 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self)
         if dialog.exec() == QDialog.Accepted:
             print("Configuración actualizada, recargando modelo...")
-            exito, self.model , msg = cargar_recargar_modelo()
+            exito, self.model , msg = cargar_recargar_modelo(self.model)
             self.modelo_cargado = exito
             self.status_mgr.show_message(msg, TIMEOUT_LONG if exito else TIMEOUT_MEDIUM)

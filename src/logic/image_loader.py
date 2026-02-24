@@ -1,35 +1,41 @@
 import rasterio
 from rasterio.enums import Resampling
-import numpy as np
+
 import random
+
+import numpy as np
+from numpy.typing import NDArray
+from numpy import float32
 
 from logic.utils.config_manager import settings
 
 from constants import MAX_LIMIT_RENDER, MAX_LIMIT_RENDER_UNLOCK
 
+from typing import TypeAlias, Callable
+
+ProgressCallback: TypeAlias = Callable[[int, str, str, bool], None]
+
 class SatelliteLoader:
     def __init__(self):
-        self.path = None
-        self.original_shape = None
-        self.scale_factor = 1.0 # Cuánto redujimos la imagen
+        self.path: str = None
+        self.original_shape: tuple = None
+        self.scale_factor: float = 1.0 # Cuanto redujimos la imagen
         self.transform = None
         self.crs = None
-        self.read = None
-
-    def get_original_shape(self) -> tuple[int, int]:
-        """Return original shape of the raster.
-        
-        :return: 
-            A tuple that contains the height, width
-        """
-        return self.original_shape
-
-    ### Update: Esta funcion es manejada por el load_worker
-    def get_metadata(self, path: str = ""):
+    
+    def get_metadata(self, path: str = "") -> None:
         """Leer el height y width del raster 
         (se puede implementar para leer el metadata entero)
-        Args:
-            A tuple that contains the height, width
+        
+        args
+        ----------
+        path: str
+            Ruta del raster
+        
+        return
+        ----------
+        tuple:
+            Tupla que contiene el height y width del raster
         """
         try:
             with rasterio.open(path) as src:   
@@ -40,21 +46,39 @@ class SatelliteLoader:
         except Exception as e:
             print(f"Error en image loader: {e}")
             raise e
+        
+    def get_original_shape(self) -> tuple[int, int]:
+        """Obtener el alto y ancho del raster.
+        
+        :return: 
+            tupla que contiene el alto (height) y ancho (width) del raster
+        """
+        return self.original_shape
 
-    def get_preview(self, 
-                    file_path: str = "",
+    def get_preview(self,
                     escala_input: int = 50,
                     bands: list = [1, 2, 3],
-                    progress_callback = None):
+                    progress_callback: ProgressCallback = None) -> NDArray[float32]:
         """
         Lee una vista previa (downsampled) de la imagen para visualización rápida.
         Devuelve una imagen lista para Napari (Y, X, B) normalizada 0-255 uint8.
+
+        args
+        ----------
+        escala_input: int
+            Valor ingresado por el usuario 0-100 para la reduccion de la imagen al cargar en el visor
+        bands: list
+            Bandas a leer (RGB)
+        progress_callback: Callable[[int, str, str, bool], None]
+            Funcion para la actualizacion de la barra de progreso
+
+        return
+        ----------
+        NDArray[float32]
+            Arreglo numpy de la imagen normalizada a 0-1
         """
-        self.path = file_path
         rand1 = random.randint(1, 5)
-        progress_callback(valor = (2 + rand1), 
-                                  msg = "Cargando:",
-                                  type = 'bar')
+        progress_callback(2 + rand1, msg = "Cargando:")
         try:
             with rasterio.open(self.path) as src:
                 self.transform = src.transform
@@ -76,37 +100,32 @@ class SatelliteLoader:
                 
                 self.scale_factor = scale
                 new_h, new_w = int(src.height * scale), int(src.width * scale)
-                progress_callback(new_w = new_w, 
-                                  new_h = new_h,
-                                  type = 'metadata')
                 
                 rand2 = random.randint(1, 5)
-                progress_callback(valor = (10 + rand2), 
-                                  msg = "Leyendo Metadata:",
-                                  type = 'bar')
+                progress_callback(10 + rand2, 
+                                  msg = "Leyendo Metadata:")
 
                 data = src.read(
                     bands,
                     out_shape = (3, new_h, new_w),
                     resampling = Resampling.bilinear
                 )
-                progress_callback(valor = 40, 
-                                  msg = "Metadata leída:",
-                                  type = 'bar')
+                progress_callback(40, msg = "Metadata leída:")
                 
-            img_vis = self._normalize_image(data, progress_callback=progress_callback)
-            
-            return img_vis
+            return self._normalize_image(data, progress_callback=progress_callback)
 
         except Exception as e:
             print(f"Error en image loader: {e}")
             raise e
         
-    def _normalize_image(self, data, progress_callback= None):
+    def _normalize_image(self, data: NDArray, progress_callback: ProgressCallback = None) -> NDArray[float32]:
         """
         Normaliza cada banda independientemente (Stretch Histogram por canal).
-        Entrada: (Bandas, Y, X)
-        Salida: (Y, X, Bandas) normalizado 0-1 (o 0-255 si prefieres)
+        
+        Args
+        ----------
+        (Bandas, Y, X)
+        Salida: (Y, X, Bandas) normalizado 0-1
         """
         # 1. Crear contenedor vacío para el resultado (float para precisión)
         # Mantenemos la forma (Bandas, Y, X) para iterar fácil
@@ -146,11 +165,7 @@ class SatelliteLoader:
             if progress_callback:
                 # Calculamos el porcentaje basado en la banda actual
                 valor = 40 + int(((i + 1) / data.shape[0]) * 60)
-                progress_callback(valor = valor,
-                                  msg = f"Banda {i}",
-                                  type = 'bar')
+                progress_callback(valor, msg = f"Banda {i}")
 
         # 3. Transponer al final para Napari: (Bandas, Y, X) -> (Y, X, Bandas)
-        img_final = np.transpose(normalized_bands, (1, 2, 0))
-        
-        return img_final
+        return np.transpose(normalized_bands, (1, 2, 0))

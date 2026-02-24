@@ -8,13 +8,28 @@ from rasterio.windows import transform as window_transform
 from shapely.geometry import box
 from rasterio.transform import xy
 import geopandas as gpd
+from typing import Callable
 
-def compute_global_percentiles_stream_per_band(tif_path: str, 
-                                               coords: tuple, 
-                                               pmin=2, pmax=98, 
-                                               bands=[1,2,3], 
-                                               nbins=10000, 
-                                               progress_callback = None):
+def compute_global_percentiles_stream_per_band(
+    tif_path: str, 
+    coords: tuple, 
+    pmin: int = 2, 
+    pmax: int = 98, 
+    bands: list = [1,2,3], 
+    nbins: int =10000, 
+    progress_callback: Callable[[int, str, str, bool], None] = None
+) -> None:
+    """
+    Calcula los percentiles de todo el ROI válido
+
+    Args
+    -----------
+    tif_path: str
+        Ruta de ubicacion del archivo raster
+    coords: tuple
+        Tupla con los valores de x, y, w, h del área válida (intersección de imagen y ROI) del ROI
+    
+    """
     with rasterio.open(tif_path) as src:
         x, y, h, w = coords
         nodata = 0
@@ -35,7 +50,7 @@ def compute_global_percentiles_stream_per_band(tif_path: str,
         current_tile = 0
         # ===== SUB-PASO 1: Calcular min/max =====
         with tqdm(total=total_tiles,
-          desc=f"Computing percentiles for GeoTIFF {tif_path}") as pbar:
+          desc = f"Computing percentiles for GeoTIFF {tif_path}") as pbar:
             for yi in ys:
                 for xi in xs:
                     win = Window(xi, yi, min(block_size, x_end-xi), min(block_size, y_end-yi))
@@ -57,7 +72,7 @@ def compute_global_percentiles_stream_per_band(tif_path: str,
                     # Progreso: 0-50% (primera mitad)
                     if progress_callback:
                         progress = int((current_tile / total_tiles) * 50)
-                        progress_callback(progress, 100, f"Calculando rango")
+                        progress_callback(progress, f"Calculando min/max...")
         
         # Histograma por banda
         hist = np.zeros((n_bands, nbins), dtype=np.int64)
@@ -66,7 +81,7 @@ def compute_global_percentiles_stream_per_band(tif_path: str,
         current_tile = 0
         # ===== SUB-PASO 2: Construir histograma =====
         with tqdm(total=total_tiles,
-          desc=f"Computing histogrram for GeoTIFF {tif_path}") as pbar:
+          desc = f"Computing histogrram for GeoTIFF {tif_path}") as pbar:
             for yi in ys:
                 for xi in xs:
                     win = Window(xi, yi, min(block_size, x_end-xi), min(block_size, y_end-yi))
@@ -88,7 +103,7 @@ def compute_global_percentiles_stream_per_band(tif_path: str,
                     # Progreso: 50-100% (segunda mitad)
                     if progress_callback:
                         progress = 50 + int((current_tile / total_tiles) * 50)
-                        progress_callback(progress, 100, f"Calculando histograma")
+                        progress_callback(progress, f"Calculando histograma...")
         
         # Percentiles por banda
         lo = np.zeros(n_bands)
@@ -107,8 +122,17 @@ def compute_global_percentiles_stream_per_band(tif_path: str,
     
     return lo, hi  # Ahora son arrays de n_bands elementos
 
-def normalize_percentiles_per_band(x: np.ndarray, lo: np.ndarray, hi: np.ndarray, nodata_value=0):
-    """x shape: (height, width, n_bands)"""
+def _normalize_percentiles_per_band(x: np.ndarray, 
+                                   lo: np.ndarray, 
+                                   hi: np.ndarray, 
+                                   nodata_value: int =0
+                                   ) -> None:
+    """
+    Normaliza los percentiles por banda del raster
+
+    Args
+    ----------
+    x shape: (height, width, n_bands)"""
     x = x.astype(np.float32)
     x_norm = np.zeros_like(x)
     
@@ -135,28 +159,42 @@ def roi_to_tiles(
     out_dir: str,
     tile_size: int = 512,
     overlap: float = 0.5,
+    lo: float = 0,
+    hi: float = 0,
     nodata_threshold: float = 0.9,
     black_tile_threshold: float = 5.0,
-    progress_callback = None
-):
+    progress_callback: Callable[[int, str, str, bool], None] = None 
+    ) -> None:
     """
-    Preprocesamiento del ROI a tiles
-    Args:
-    
+    Extrae el área del roi demarcado para normalizar y 
+    generar los parches.
+
+    Args
+    ----------
+    coords: tuple
+        Tupla con los valores de x, y, w, h del área válida (intersección de imagen y ROI) del ROI
+    tif_name: str
+        Nombre del raster
+    tif_path: str
+        Ruta de ubicacion del archivo raster
+    out_dir: str
+        Ruta de guardado de los parches
+    tile_size: int
+        Tamaño de los parches en pixeles
+    overlap: float
+        Porcentaje de cuanto se solapan los parches
+    nodata_threshold: float
+        Proporción antes de descartar parche
+    black_tile_threshold: float
+        Proporción de area oscura antes de descartar parche
+    progress_callback: Callable[[int, str, str, bool], None] = None
+        - int: 
     """
     os.makedirs(out_dir, exist_ok=True)
 
     if progress_callback:
-        progress_callback(0, 100, "Paso 1/3: Calculando percentiles...")
-    # Calcular percentiles globales
-    lo, hi = compute_global_percentiles_stream_per_band(tif_path, coords, progress_callback = progress_callback)
+        progress_callback(0, "Generando tiles...")
 
-    if progress_callback:
-        progress_callback(100, 100, "Percentiles calculados")
-
-
-    if progress_callback:
-        progress_callback(0, 100, "Paso 2/3: Generando tiles...")
     with rasterio.open(tif_path) as src:
         x, y, W, H = coords
         bands = src.count
@@ -213,7 +251,7 @@ def roi_to_tiles(
                     else:
                         raise ValueError("TIF must have at least 3 bands (RGB).")
 
-                    tile_rgb_8bit = normalize_percentiles_per_band(tile_rgb, lo, hi, nodata_value)
+                    tile_rgb_8bit = _normalize_percentiles_per_band(tile_rgb, lo, hi, nodata_value)
 
                     # Detectar tiles negros
                     #mean_intensity = np.mean(tile_rgb_8bit)
@@ -271,7 +309,7 @@ def roi_to_tiles(
                 # Reportar progreso del tiling
                 if progress_callback:
                     progress = int((i / total_tiles) * 100)
-                    progress_callback(progress, 100, f"Generando tiles:")
+                    progress_callback(progress, f"Generando tiles...")
 
     # ===== PASO 3: Guardar metadatos =====
 
@@ -280,7 +318,7 @@ def roi_to_tiles(
         crs = src.crs
     )
     gpkg_path = os.path.join(out_dir, "tiles_index.gpkg")
-    gdf.to_file(gpkg_path, layer="tiles", driver="GPKG")
+    gdf.to_file(gpkg_path, layer="tiles", driver="GPKG", engine = "pyogrio")
 
     with open(os.path.join(out_dir, "tiles_metadata.json"), "w") as f:
         json.dump(metadata, f, indent=2)

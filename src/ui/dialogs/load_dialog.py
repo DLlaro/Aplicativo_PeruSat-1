@@ -7,12 +7,12 @@ from constants import MAX_LIMIT_RENDER
 
 
 class LoadDialog(QDialog):
-    def __init__(self, parent=None, w = None, h = None):
+    def __init__(self, parent = None, shape: tuple = None):
         super().__init__(parent)
         self.setWindowTitle("Configuración de Carga")
         self.resize(350, 150)
-        self.w = w
-        self.h = h
+        self.h = shape[0]
+        self.w = shape[1]
         
         self._setup_ui()
         self._update_dimensions()
