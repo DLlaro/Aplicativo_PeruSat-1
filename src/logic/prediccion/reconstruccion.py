@@ -5,11 +5,23 @@ import rasterio
 from rasterio.transform import Affine
 from tqdm import tqdm
 
+from typing import TypeAlias, Callable
+
+ProgressCallback: TypeAlias = Callable[[int, str, str, bool], None]
+
 def stitch_tiles_by_class(tif_name: str,
                           tiles_dir: str, 
                           pred_dir: str, 
                           output_dir: str, 
-                          num_classes=3, progress_callback=None):
+                          num_classes=3, progress_callback: ProgressCallback=None) -> None:
+    """
+    Reconstruye el ROI a traves de los tif predichos.
+    Guarda los tif reconstruidos por separado 
+
+    Write
+    ----------
+    Guarda los tif de cada clase encontrada en las mascaras predichas
+    """
     
     metadata_path = os.path.join(tiles_dir, "tiles_metadata.json")
     with open(metadata_path) as f:

@@ -38,7 +38,7 @@ def _pixel_to_latlon(pixel_x: float, pixel_y: float, transform, crs) -> tuple[fl
         transformer = Transformer.from_crs(
             crs, 
             "EPSG:4326", 
-            always_xy=True
+            always_xy=True #devuelve lon, lat
         )
         lon, lat = transformer.transform(x_geo, y_geo)
         
@@ -46,11 +46,11 @@ def _pixel_to_latlon(pixel_x: float, pixel_y: float, transform, crs) -> tuple[fl
 
 def rectangle_to_coords(layer, scale_factor) -> tuple[float, float, float, float]:
         """
-        Extrae las coordenadas y dimensiones reales del ROI desde la capa.
+        Extrae las coordenadas y dimensiones reales del ROI
         
         Args:
-            layer: Capa de shapes de Napari
-        
+            layer: Capa dibujada por el usuario en el visor
+                    
         Returns:
             tuple: (real_x, real_y, real_w, real_h)
         """

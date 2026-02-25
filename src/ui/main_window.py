@@ -10,22 +10,12 @@ from logic.utils.config_manager import settings
 from logic.modelo.model_utils import cargar_recargar_modelo
 
 from ui.roi_manager import ROIManager
-
-from ui.dialogs.analyze_dialog import AnalyzeDialog
-from ui.dialogs.load_dialog import LoadDialog
-from ui.dialogs.settings_dialog import SettingsDialog
-
-from ui.components.viewer_panel import ViewerPanel
-from ui.components.toolbar import AppToolbar
-from ui.components.status_bar import StatusBarManager
-from ui.components.sidebar import SideBarManager
-
-from ui.handlers.mouse_handler import MouseHandler
-from ui.handlers.keyboard_handler import KeyboardHandler
+from ui.dialogs import (AnalyzeDialog, LoadDialog, SettingsDialog)
+from ui.components import (ViewerPanel, AppToolbar, StatusBarManager, SideBarManager)
+from ui.handlers import (MouseHandler, KeyboardHandler)
 
 from constants import (DEFAULT_WINDOW_HEIGHT, DEFAULT_WINDOW_WIDTH, MSG_ROI_ACTIVE, 
-                       MSG_ROI_READY, MSG_IMAGE_LOADED, TIMEOUT_MEDIUM, 
-                       TIMEOUT_LONG, MIN_AREA_KM2)
+                       MSG_ROI_READY, TIMEOUT_MEDIUM, TIMEOUT_LONG, MIN_AREA_KM2)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -55,7 +45,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.container)
 
         # Componentes
-        self.viewer_panel = ViewerPanel(self.viewer_model, settings.base_path)
+        self.viewer_panel = ViewerPanel(self.viewer_model)
         self.toolbar = AppToolbar(parent=self)
         self.addToolBar(self.toolbar)
         self.status_mgr = StatusBarManager(self.statusBar())
@@ -74,8 +64,8 @@ class MainWindow(QMainWindow):
         )
 
         # Handlers
-        self.mouse_handler = MouseHandler(self)                 # mouse callbacks
-        self.keyboard_handler = KeyboardHandler(self)          # shortcuts
+        self.mouse_handler = MouseHandler(self)        # mouse callbacks
+        self.keyboard_handler = KeyboardHandler(self)  # shortcuts
 
         # Señales
         self._connect_signals()
@@ -93,12 +83,18 @@ class MainWindow(QMainWindow):
     def toggle_checked_roi(self, is_active: bool) -> None:
         """
         Alterna entre marcar y desmarcar la opcion de ROI
+
+        Args
+        ----------
+        is_active: bool
+            - True → Esta marcado el boton de ROI
+            - False → Esta desmarcado el boton de ROI
         """
         self.toolbar.set_roi_checked(is_active)        # setText happens inside here
         if is_active:
             self.status_mgr.show_message(MSG_ROI_ACTIVE)
 
-    def existe_poligono(self, tiene_datos: bool):
+    def existe_poligono(self, tiene_datos: bool) -> None:
         """
         Este método recibe True o False desde el ROIManager
         Habilita o deshabilita el boton analizar si hay poligono
@@ -113,7 +109,7 @@ class MainWindow(QMainWindow):
         if tiene_datos:
             self.status_mgr.show_message(MSG_ROI_READY, TIMEOUT_MEDIUM)
 
-    def _connect_signals(self):
+    def _connect_signals(self) -> None:
         self.toolbar.action_open.triggered.connect(self.abrir_archivo)
         self.toolbar.action_roi.triggered.connect(self.toggle_modo_roi)
         self.toolbar.action_analyze.triggered.connect(self.analizar_imagen)
@@ -132,9 +128,15 @@ class MainWindow(QMainWindow):
         # callback automatico
         self.actualizar_disponibilidad_ui(valor)
 
-    def actualizar_disponibilidad_ui(self, habilitado):
+    def actualizar_disponibilidad_ui(self, habilitado) -> None:
         """
         Activar o deshabilitar botones si se ha cargado un archivo
+
+        Args
+        ----------
+        habilitado: bool
+            - True → Archivo cargado en el visor
+            - False → No hay archivo cargado en el visor
         """
         self.toolbar.set_roi_enabled(habilitado)
         if habilitado:
@@ -153,10 +155,10 @@ class MainWindow(QMainWindow):
         #self.toolbar.set_config_enabled = valor
 
 
-    def abrir_archivo(self):
+    def abrir_archivo(self) -> None:
         """
         Abre un explorador de archivos para seleccionar el tif.
-        Instancia un worker para cargar la imagen.
+        Instancia un worker para cargar la metadata de la imagen.
         """
         raster_path, _ = QFileDialog.getOpenFileName(
             self, "Abrir Raster","", "GeoTIFF (*.tif *.tiff)",
@@ -170,13 +172,14 @@ class MainWindow(QMainWindow):
         self.workerMetadata.error.connect(lambda msg: QMessageBox.critical(self, "Error", msg))
         self.workerMetadata.start()
         
-    def mostrar_load_dialog(self, shape : tuple):
+    def mostrar_load_dialog(self, shape : tuple) -> None:
         """
         Mostrar cuadro de dialogo con la configuracion para cargar el raster.
 
         Args
         ----------
-        width: 
+        shape: tuple
+            Contiene el alto y ancho del raster H x W  
         """
         self.status_mgr.show_message(f"Procesando imagen de {shape[1]}x{shape[0]} px...")
 
@@ -187,7 +190,15 @@ class MainWindow(QMainWindow):
         else:
             print("Carga cancelada.")
 
-    def cargar_en_visor(self, input_escala):
+    def cargar_en_visor(self, input_escala) -> None:
+        """
+        Instancia un ImageWorker para cargar en un hilo aparte la imagen.
+
+        Args
+        ----------
+        input_escala: int
+            Valor ingresado por el usuario 0-100 para la reduccion de la imagen al cargar en el visor
+        """
         self.archivo_cargado = False
         try:
             # --- limpiar visor ---
@@ -216,26 +227,29 @@ class MainWindow(QMainWindow):
             # Ejecutar hilo
             self.worker.start()
             
-            # La imagen cargó bien. Cambiamos el stack para mostrar el visor (Índice 1) en vez del logo.
-            self.viewer_panel.show_viewer()
-            
         except Exception as e:
             print(f"Error UI: {e}", flush=True)
             # Opcional: Mostrar alerta visual
             # QMessageBox.critical(self, "Error", str(e))
 
-    def finalizar_carga_img(self, img_data):
+    def finalizar_carga_img(self, img_data) -> None:
+        """
+        Añade la imagen al visor de napari.
+        """
         # Añadimos a Napari
-        self.viewer_model.add_image(img_data, name="PeruSat-1 Preview", rgb=True)
+        self.viewer_model.add_image(img_data, name='Preview', contrast_limits=[0, 1])
         self.status_mgr.show_message("Imagen cargada exitosamente", TIMEOUT_LONG)
-        self.viewer_model.reset_view()
+        self.viewer_model.reset_view()# Centrar y ajustar zoom
 
         # Actulizar flag
         self.archivo_cargado = True
+
+        # La imagen cargó. Cambiamos el stack para mostrar el visor (Índice 1) en vez del logo.
+        self.viewer_panel.show_viewer()
         self.toolbar.set_config_enabled(True)
         print("Nueva imagen cargada correctamente.")
     
-    def limpiar_visor(self):
+    def limpiar_visor(self) -> None:
         self.viewer_model.layers.clear()
         self.roi_manager.limpiar()
         
@@ -254,7 +268,7 @@ class MainWindow(QMainWindow):
 
         self.roi_manager.activar_herramienta(activar)
     
-    def analizar_imagen(self):
+    def analizar_imagen(self)  -> None:
         """
         Analiza la región de interés (ROI) seleccionada:
         1. Valida que exista un ROI
@@ -269,11 +283,11 @@ class MainWindow(QMainWindow):
 
             if not es_valido:
                 if not self._handle_roi_invalido(mensaje):
-                    return None
+                    return
 
             if not self.modelo_cargado:
                 self.settings()
-                return None
+                return
 
             analyze_dlg = AnalyzeDialog(self, self.roi_manager.area_km2, lambda: self.select_directory(ruta_inicial=self.loader.path))
             ok = analyze_dlg.exec()
@@ -286,7 +300,7 @@ class MainWindow(QMainWindow):
                         "Directorio inexistente"
                     )
                     self.status_mgr.show_message("Carpeta Inválida")
-                    return None
+                    return
                 
                 self.status_mgr.show_progress()
                 self.toolbar.set_all_enabled(False)
@@ -330,10 +344,22 @@ class MainWindow(QMainWindow):
         self.status_mgr.show_message("ROI inválido - ajusta la selección")
         return False
 
-    def select_directory(self, titulo="Seleccionar Carpeta", ruta_inicial=""):
+    def select_directory(self, titulo="Seleccionar Carpeta", ruta_inicial="") -> str | None:
         """
         Abre un diálogo para seleccionar una carpeta.
         Retorna la ruta seleccionada o None si se cancela.
+
+        Args
+        ----------
+        titulo: str
+            Titulo del explorador de archivos
+        ruta_inicial: str
+            Ruta inicial donde abrira el explorador de archivos
+
+        Return
+        ----------
+        : str | None
+            Ruta de la carpeta seleccionada por el usuario
         """
         folder_path = QFileDialog.getExistingDirectory(
             self,
@@ -344,12 +370,18 @@ class MainWindow(QMainWindow):
         if folder_path:
             print(folder_path)
             return folder_path
-        return None
+        return
 
     def _mostrar_resultado_analisis(self, shape_data: object) -> None:
-        """Muestra el resultado del análisis al usuario."""
-
-        # Determine which method to use based on the data type
+        """Muestra el resultado del análisis al usuario.
+        
+        Args
+        ----------
+        shape_data :dict
+            - 'type': 'shapes'
+            - 'data': list[np.ndarray] — coordenadas en píxeles (row, col) de cada polígono, listas para Napari.
+            - 'shape_type': 'polygon'
+        """
         if shape_data['type'] == 'points':
             self.viewer_model.add_points(
                 shape_data['data'],
@@ -377,10 +409,14 @@ class MainWindow(QMainWindow):
         self.toolbar.set_all_enabled(True)
         self.status_mgr.hide_progress()
 
-    def reset(self):
+    def reset(self) -> None:
+        """Limpia la capa ROI"""
         self.roi_manager.limpiar()
 
-    def settings(self):
+    def settings(self) -> None:
+        """
+        Abrir el menú de configuración
+        """
         dialog = SettingsDialog(self)
         if dialog.exec() == QDialog.Accepted:
             print("Configuración actualizada, recargando modelo...")

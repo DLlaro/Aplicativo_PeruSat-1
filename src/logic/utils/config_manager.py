@@ -54,6 +54,14 @@ class AppConfig:
         self.settings.setValue("gpu/use_gpu", value)
 
     @property
+    def total_render(self):
+        return str(self.settings.value("total_render", "False")).lower() == "true"
+
+    @total_render.setter
+    def total_render(self, value):
+        self.settings.setValue("total_render", value)
+
+    @property
     def gpu_info(self):
         # 1. Obtenemos el valor (por defecto un string de dict vacío '{}')
         data_str = self.settings.value("gpu/gpu_info", "{}")
@@ -63,11 +71,6 @@ class AppConfig:
         except (json.JSONDecodeError, TypeError):
             return {}
         
-    @property
-    def torch_device(self):
-        return torch.device('cuda' if torch.cuda.is_available() and settings.use_gpu else 'cpu')
-
-
     @gpu_info.setter
     def gpu_info(self, value):
         if value is None:
@@ -76,9 +79,15 @@ class AppConfig:
             self.settings.setValue("gpu/gpu_info", json.dumps(value))
         else:
             print("Error: El valor debe ser un diccionario.")
-
+    @property
+    def torch_device(self):
+        return torch.device('cuda' if torch.cuda.is_available() and settings.use_gpu else 'cpu')
     @property
     def logo_path(self):
+        return os.path.join(self.internal_path, "assets", "inei_logo.ico")
+    
+    @property
+    def logo_path_png(self):
         return os.path.join(self.internal_path, "assets", "inei_logo.png")
     
     @property

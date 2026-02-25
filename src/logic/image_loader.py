@@ -2,57 +2,69 @@ import rasterio
 from rasterio.enums import Resampling
 
 import random
-
+from tqdm import tqdm
 import numpy as np
 from numpy.typing import NDArray
-from numpy import float32
+from numpy import float32, uint8
+from rasterio.windows import Window
 
 from logic.utils.config_manager import settings
 
 from constants import MAX_LIMIT_RENDER, MAX_LIMIT_RENDER_UNLOCK
 
-from typing import TypeAlias, Callable
+from typing import TypeAlias, Callable,  Optional, Tuple
 
 ProgressCallback: TypeAlias = Callable[[int, str, str, bool], None]
 
 class SatelliteLoader:
-    def __init__(self):
+    def __init__(self) -> None:
         self.path: str = None
-        self.original_shape: tuple = None
-        self.scale_factor: float = 1.0 # Cuanto redujimos la imagen
+        self.original_shape: Optional[Tuple[int, int]] = None  # (H, W)
+        self.scaled_shape: Optional[Tuple[int, int]] = None
+        self.scale_factor: float = 1.0
         self.transform = None
         self.crs = None
+        self.global_lo: Optional[float] = None
+        self.global_hi: Optional[float] = None
     
-    def get_metadata(self, path: str = "") -> None:
-        """Leer el height y width del raster 
-        (se puede implementar para leer el metadata entero)
-        
-        args
+    def load_metadata(self, path: str) -> Tuple[int, int]:
+        """
+        Lee los metadatos básicos del raster (height y width).
+
+        Parameters
         ----------
-        path: str
-            Ruta del raster
-        
-        return
-        ----------
-        tuple:
-            Tupla que contiene el height y width del raster
+        path : str | Path
+            Ruta al archivo raster.
+
+        Returns
+        -------
+        Tuple[int, int]
+            (height, width)
         """
         try:
-            with rasterio.open(path) as src:   
+            with rasterio.open(path) as src:
                 self.path = path
                 self.original_shape = (src.height, src.width)
-                return self.original_shape
+                self.transform = src.transform
+                self.crs = src.crs
 
-        except Exception as e:
-            print(f"Error en image loader: {e}")
-            raise e
+            return self.original_shape
+
+        except rasterio.errors.RasterioIOError as e:
+            raise RuntimeError(f"No se pudo abrir el raster: {e}") from e
         
-    def get_original_shape(self) -> tuple[int, int]:
-        """Obtener el alto y ancho del raster.
-        
-        :return: 
-            tupla que contiene el alto (height) y ancho (width) del raster
+    def get_original_shape(self) -> Tuple[int, int]:
         """
+        Devuelve el shape original del raster.
+
+        Raises
+        ------
+        ValueError
+            Si aún no se ha cargado metadata.
+        """
+        if self.original_shape is None:
+            raise ValueError("No se ha cargado metadata todavía.")
+
         return self.original_shape
 
     def get_preview(self,
@@ -60,16 +72,17 @@ class SatelliteLoader:
                     bands: list = [1, 2, 3],
                     progress_callback: ProgressCallback = None) -> NDArray[float32]:
         """
-        Lee una vista previa (downsampled) de la imagen para visualización rápida.
-        Devuelve una imagen lista para Napari (Y, X, B) normalizada 0-255 uint8.
+        Lee una imagen reescalada (downsampled) del raster para una visualización rápida, 
+        calcula los percentiles 2-98.
+        Devuelve una imagen lista para el visor Napari (Y, X, B) normalizada entre 0-255 float32.
 
         args
         ----------
         escala_input: int
             Valor ingresado por el usuario 0-100 para la reduccion de la imagen al cargar en el visor
         bands: list
-            Bandas a leer (RGB)
-        progress_callback: Callable[[int, str, str, bool], None]
+            Bandas del raster a leer (RGB)
+        progress_callback: ProgressCallback
             Funcion para la actualizacion de la barra de progreso
 
         return
@@ -77,12 +90,8 @@ class SatelliteLoader:
         NDArray[float32]
             Arreglo numpy de la imagen normalizada a 0-1
         """
-        rand1 = random.randint(1, 5)
-        progress_callback(2 + rand1, msg = "Cargando:")
         try:
             with rasterio.open(self.path) as src:
-                self.transform = src.transform
-                self.crs = src.crs
                 #print("unlock", self.unlock)
                 if settings.use_gpu:
                     max_render = MAX_LIMIT_RENDER_UNLOCK
@@ -99,73 +108,167 @@ class SatelliteLoader:
                     scale = escala_perct
                 
                 self.scale_factor = scale
-                new_h, new_w = int(src.height * scale), int(src.width * scale)
+                self.scaled_shape = int(src.height * scale), int(src.width * scale)
                 
-                rand2 = random.randint(1, 5)
-                progress_callback(10 + rand2, 
-                                  msg = "Leyendo Metadata:")
+                progress_callback(10, msg = "Leyendo Metadata:", infinite = True)
 
+                # Lectura y reescalado de la imagen a nuevas dimensiones
                 data = src.read(
                     bands,
-                    out_shape = (3, new_h, new_w),
+                    out_shape = (3, self.scaled_shape[0], self.scaled_shape[1]),
                     resampling = Resampling.bilinear
                 )
-                progress_callback(40, msg = "Metadata leída:")
-                
-            return self._normalize_image(data, progress_callback=progress_callback)
+
+                data = np.transpose(data, (1, 2, 0))  # (3, H, W) → (H, W, 3)
+
+                self.compute_global_percentiles_stream_per_band(progress_callback= progress_callback)
+
+            return self._normalize_percentiles_per_band(data) / 255 # division entre 255 porque visor requiere valores entre 0-1
 
         except Exception as e:
             print(f"Error en image loader: {e}")
             raise e
-        
-    def _normalize_image(self, data: NDArray, progress_callback: ProgressCallback = None) -> NDArray[float32]:
+
+    def compute_global_percentiles_stream_per_band(self,
+        pmin: int = 2, 
+        pmax: int = 98, 
+        bands: list = [1,2,3], 
+        nbins: int =10000, 
+        progress_callback: ProgressCallback = None
+    ) -> None:
         """
-        Normaliza cada banda independientemente (Stretch Histogram por canal).
+        Calcula los valores minimos y maximos de cada banda 
+        en el raster reescalado
+
+        Args
+        -----------
+        pmin: int
+            percentil inferior
+        pmax: int
+            percentil superior
+        bands: list
+            bandas del raster a leer
+        nbins: int
+            numero de bins para el histograma
+        progress_callback: ProgressCallback
+            Funcion para la actualizacion de la barra de progreso
+        """
+        with rasterio.open(self.path) as src:
+            nodata = 0
+            block_size = 1024
+            n_bands = len(bands)
+            
+            # Min/max por banda
+            global_min = np.full(n_bands, np.inf)
+            global_max = np.full(n_bands, -np.inf)
+            
+            ys = range(0, self.scaled_shape[0], block_size)
+            xs = range(0, self.scaled_shape[1], block_size)
+
+            total_tiles = len(ys) * len(xs)
+
+            current_tile = 0
+            # ===== SUB-PASO 1: Calcular min/max =====
+            with tqdm(total=total_tiles,
+            desc = f"Computing percentiles for GeoTIFF {self.path}") as pbar:
+                for y in ys:
+                    for x in xs:
+                        win = Window(x, y, min(block_size, self.scaled_shape[1]-x), min(block_size, self.scaled_shape[0]-y))
+                        block = src.read(bands, window=win).astype(np.float32)  # shape: (n_bands, rows, cols)
+                        
+                        for b in range(n_bands):
+                            band_data = block[b]
+                            if nodata is not None:
+                                valid_values = band_data[band_data != nodata]
+                            else:
+                                valid_values = band_data.flatten()
+                            
+                            if valid_values.size > 0:
+                                global_min[b] = min(global_min[b], valid_values.min())
+                                global_max[b] = max(global_max[b], valid_values.max())
+                        pbar.update(1)
+
+                        current_tile += 1
+                        # Progreso: 0-50% (primera mitad)
+                        if progress_callback:
+                            progress = int((current_tile / total_tiles) * 50)
+                            progress_callback(progress, f"Calculando min/max...")
+            
+            # Histograma por banda
+            hist = np.zeros((n_bands, nbins), dtype=np.int64)
+            bin_edges = [np.linspace(global_min[b], global_max[b], nbins+1) for b in range(n_bands)]
+
+            current_tile = 0
+            # ===== SUB-PASO 2: Construir histograma =====
+            with tqdm(total=total_tiles,
+            desc = f"Computing histogrram for GeoTIFF {self.path}") as pbar:
+                for y in ys:
+                    for x in xs:
+                        win = Window(x, y, min(block_size, self.scaled_shape[1]-x), min(block_size, self.scaled_shape[0]-y))
+                        block = src.read(bands, window=win).astype(np.float32)
+                        
+                        for b in range(n_bands):
+                            band_data = block[b]
+                            if nodata is not None:
+                                values = band_data[band_data != nodata]
+                            else:
+                                values = band_data.flatten()
+                            
+                            hist_block, _ = np.histogram(values, bins=bin_edges[b])
+                            hist[b] += hist_block
+                        pbar.update(1)
+
+                        current_tile += 1
+                    
+                        # Progreso: 50-100% (segunda mitad)
+                        if progress_callback:
+                            progress = 50 + int((current_tile / total_tiles) * 50)
+                            progress_callback(progress, f"Calculando histograma...")
+            
+            # Percentiles por banda
+            lo = np.zeros(n_bands)
+            hi = np.zeros(n_bands)
+            
+            for b in range(n_bands):
+                cdf = np.cumsum(hist[b])
+                if cdf[-1] == 0:
+                    lo[b], hi[b] = 0, 0
+                    continue
+                cdf = cdf / cdf[-1]  # Normalizar a [0,1]
+                idx_lo = np.searchsorted(cdf, pmin/100)
+                idx_hi = np.searchsorted(cdf, pmax/100)
+                lo[b] = bin_edges[b][min(idx_lo, len(bin_edges[b])-1)]
+                hi[b] = bin_edges[b][min(idx_hi, len(bin_edges[b])-1)]
         
+        self.global_lo, self.global_hi = lo, hi  # low, hi de la imagen reescalada (mas rapido)
+    
+    def _normalize_percentiles_per_band(self, x: NDArray,
+                                    nodata_value: int =0
+                                    ) -> NDArray[uint8]:
+        """
+        Normaliza la imagen por banda del raster usando los percentiles calculados
+
         Args
         ----------
-        (Bandas, Y, X)
-        Salida: (Y, X, Bandas) normalizado 0-1
+        x: NDArray
+            (height, width, n_bands) for numpy
+        nodata_value: int
+            valor de NoData en el raster
         """
-        # 1. Crear contenedor vacío para el resultado (float para precisión)
-        # Mantenemos la forma (Bandas, Y, X) para iterar fácil
-        normalized_bands = np.zeros_like(data, dtype=np.float32)
-
-        # 2. Iterar sobre cada banda (0=R, 1=G, 2=B)
-        for i in range(data.shape[0]):
-            band = data[i].astype(np.float32)
-            
-            # Máscara de datos válidos para ESTA banda
-            valid_mask = (band > 0) & (band < 4095)
-            
-            if valid_mask.any():
-                # Calcular percentiles SOLO de esta banda
-                # Esto equilibra los colores (White Balancing automático)
-                p2, p98 = np.percentile(band[valid_mask], (2, 98))
-                
-                # Clip (cortar extremos)
-                band_clipped = np.clip(band, p2, p98)
-                
-                # Escalar de p2..p98 a 0..1
-                denominador = p98 - p2
-                if denominador == 0: denominador = 1  # Evitar div/0
-                
-                band_norm = (band_clipped - p2) / denominador
-                
-                # Limpiar el fondo (NoData) de nuevo
-                band_norm[~valid_mask] = 0
-                
-                normalized_bands[i] = band_norm
+        x_norm = np.zeros_like(x, dtype = np.float32)
+        
+        for b in range(x.shape[-1]):
+            band = x[..., b]
+            if nodata_value is not None:
+                valid = band != nodata_value
+                x_norm[..., b][valid] = np.clip((band[valid] - self.global_lo[b]) / (self.global_hi[b] - self.global_lo[b] + 1e-6), 0, 1)
             else:
-                # Si la banda es todo 0 (negra)
-                normalized_bands[i] = 0
-            
-            # Notificar progreso 
-            # cada una representa el 33% del proceso de normalización.
-            if progress_callback:
-                # Calculamos el porcentaje basado en la banda actual
-                valor = 40 + int(((i + 1) / data.shape[0]) * 60)
-                progress_callback(valor, msg = f"Banda {i}")
-
-        # 3. Transponer al final para Napari: (Bandas, Y, X) -> (Y, X, Bandas)
-        return np.transpose(normalized_bands, (1, 2, 0))
+                x_norm[..., b]= np.clip((band - self.global_lo[b]) / (self.global_hi[b] - self.global_lo[b] + 1e-6), 0, 1)
+        
+        out = (x_norm * 254 + 1).astype(np.uint8)## convertir valores cercanos a 0 a 1 para que no sean tratados como nodata
+        
+        if nodata_value is not None:
+            valid_mask = np.all(x != nodata_value, axis=-1)
+            out[~valid_mask] = 0
+        
+        return out

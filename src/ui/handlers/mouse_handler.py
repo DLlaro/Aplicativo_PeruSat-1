@@ -1,7 +1,7 @@
 # mouse_handler.py
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from logic.utils.coordinate_utils import cursor_to_coords, rectangle_to_coords
+from logic.utils import cursor_to_coords, rectangle_to_coords
 from constants import PIXEL_SIZE_PERU_SAT
 
 if TYPE_CHECKING:

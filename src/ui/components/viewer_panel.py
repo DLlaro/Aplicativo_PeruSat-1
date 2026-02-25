@@ -8,11 +8,9 @@ from constants import LOGO_SIZE
 from logic.utils.config_manager import settings
 
 class ViewerPanel(QWidget):
-    def __init__(self, viewer_model, base_path):
+    def __init__(self, viewer_model):
         super().__init__()
         self.viewer_model = viewer_model
-        self.base_path = base_path
-        
         self.main_stack = QStackedLayout(self)
         self._setup()
     
@@ -27,7 +25,7 @@ class ViewerPanel(QWidget):
         layout.setAlignment(Qt.AlignCenter)
 
         lbl_img = QLabel()
-        logo_path = settings.logo_path
+        logo_path = settings.logo_path_png
 
         if os.path.exists(logo_path):
             pixmap = QPixmap(logo_path)

@@ -4,8 +4,9 @@ import tempfile
 from logic.workers.base_worker import BaseWorker
 from logic.image_loader import SatelliteLoader
 from logic.modelo.model_architecture import BuildingRoadModel
-from logic.prediccion import (compute_global_percentiles_stream_per_band,roi_to_tiles, predict_tiles_multiclase, 
+from logic.prediccion import (roi_to_tiles, predict_tiles_multiclase, 
                               stitch_tiles_by_class, raster_to_vector, load_vector_to_napari)
+
 class TilingWorker(BaseWorker):
     finished = Signal(object)
 
@@ -13,54 +14,49 @@ class TilingWorker(BaseWorker):
                  loader: SatelliteLoader,
                  coords: tuple, 
                  modelo: BuildingRoadModel, 
-                 output_dir: str):
+                 output_dir: str) -> None:
         super().__init__()
         self.loader = loader
         self.coords = coords
         self.modelo = modelo
         self.output_path = output_dir
 
-    def run(self):
+    def run(self) -> None:
         """
         Obtiene el nombre del archivo y lo usa como identificador
         para la creacion de carpetas usadas durante el procesamiento.
 
         1. Se crean los parches/tiles
-        2. Se generan las predicciones
+        2. Se generan las inferencias
         3. Se reconstruye el tif del ROI con las máscaras predichas
         4. Se convierte el tif reconstruido en una capa vectorial
         5. Se carga la capa vectorial en el visor de napari
         """
         try: 
             TIF_ID = os.path.basename(self.loader.path).split(".")[0]
+
+            base_output = os.path.join(self.output_path, TIF_ID)
             gpkg_output = os.path.join(self.output_path, TIF_ID, "GPKG")
             os.makedirs(gpkg_output, exist_ok=True)
 
             with tempfile.TemporaryDirectory() as tmp:
                 paths = {
-                    'tiles':  os.path.join(tmp, "Tiles"),
-                    'masks':  os.path.join(tmp, "Masks_Pred"),
-                    'recons': os.path.join(tmp, "Reconstruccion"),
+                    'tiles':  os.path.join(base_output, "Tiles"),
+                    'masks':  os.path.join(base_output, "Masks_Pred"),
+                    'recons': os.path.join(base_output, "Reconstruccion"),
                     'gpkg':   gpkg_output   # permanente
                 }
 
                 for path in paths.values():
                     os.makedirs(path, exist_ok=True)
 
-                print("\n[1/5] Calculando percentiles...")
-                low , high = compute_global_percentiles_stream_per_band(tif_path = self.loader.path,
-                                                           coords = self.coords,
-                                                           progress_callback = self.progress)
-
                 print("\n[1/5] Generando tiles...")
                 roi_to_tiles(coords = self.coords, 
                             tif_name = TIF_ID,
-                            tif_path = self.loader.path, 
+                            loader = self.loader,
                             out_dir = paths['tiles'], 
                             tile_size = 512, 
                             overlap = 0,
-                            lo = low, 
-                            hi = high,
                             progress_callback = self.progress)
 
                 print("\n[2/5] Infiriendo...")

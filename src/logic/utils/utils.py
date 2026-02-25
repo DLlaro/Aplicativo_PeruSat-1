@@ -2,6 +2,17 @@ import psutil
 import torch
 
 def get_nvidia_info_torch():
+    """
+    Verifica si existe cuda en el computador y recolectar información de la gpu
+
+    return
+    ----------
+    dict :dict
+        - "gpu_name": Nombre de la GPU
+        - "usado_mb": VRAM usada por torch
+        - "total_mb": VRAM total
+        - "libre_mg": VRAM libre
+    """
     # Caso 1: No hay GPU o drivers no instalados
     if not torch.cuda.is_available():
         return {
@@ -42,6 +53,15 @@ def get_nvidia_info_torch():
         }
 
 def get_ram_info():
+    """
+    Recolecta información de la RAM del equipo
+
+    return
+    ----------
+    dict :dict
+        - "total_mb": RAM total
+        - "available_mb": RAM disponible
+    """
     ram = psutil.virtual_memory()
     return {
         "total_mb": ram.total // (1024 * 1024),

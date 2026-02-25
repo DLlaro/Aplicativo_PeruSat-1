@@ -19,7 +19,6 @@ class LoadDialog(QDialog):
     
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        gpu_info = settings.gpu_info
         ram: dict = get_ram_info()
 
         # Crear contenedor
@@ -46,16 +45,25 @@ class LoadDialog(QDialog):
 
         scale_layout.addWidget(self.spin_escala)
 
-        if settings.use_gpu:
-            if not gpu_info["gpu_name"]=="CPU" and ram["available_mb"] >= 8192:
-                print("GPU potente disponible")
-                layout.addWidget(self._gpu_specs(frame, gpu_info))
-                self._unlock_scale()  
-        elif self.w < MAX_LIMIT_RENDER and self.h < MAX_LIMIT_RENDER:
+        gpu_available = (
+            settings.use_gpu
+            and settings.gpu_info["gpu_name"] != "CPU"
+            and ram["available_mb"] >= 8192
+        )
+
+        size_within_limit = (
+            self.w < MAX_LIMIT_RENDER
+            and self.h < MAX_LIMIT_RENDER
+        )
+
+        if gpu_available:
+            print("GPU potente disponible")
+            layout.addWidget(self._gpu_specs(frame, settings.gpu_info))
+
+        if (gpu_available and settings.total_render) or size_within_limit:
             self._unlock_scale()
         else:
             self._lock_scale()
-
         
         ## Redimension 
         # Scale factor

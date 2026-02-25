@@ -6,18 +6,33 @@ from glob import glob
 from tqdm import tqdm
 
 from logic.utils.config_manager import settings
+from logic.modelo.model_architecture import BuildingRoadModel
 
-def predict_tiles_multiclase(input_dir, output_dir, model, progress_callback = None):
+from typing import TypeAlias, Callable
+
+ProgressCallback: TypeAlias = Callable[[int, str, str, bool], None]
+
+def predict_tiles_multiclase(tiles_dir: str, 
+                             output_dir: str, 
+                             model: BuildingRoadModel, 
+                             progress_callback: ProgressCallback = None) -> None:
     """
-    Predice máscaras multiclase para todos los tiles TIF en una carpeta.
+    Se configura el modelo a modo evaluacion y a usar el dispositivo permitido 'CPU' o 'GPU',
+    Predice las máscaras multiclase para todos los parches generados del ROI.
 
-    Clases:
-    0 = background
-    1 = road
-    2 = building
+    Args
+    ----------
+    tiles_dir: str
+        Ruta de la carpeta donde se almacenan los parches generados
+    output_dir: str
+        Ruta de salida de las mascaras inferidas
+    mode: BuildingRoadModel
+        Modelo de inferencia
+    progress_callback: ProgressCallback
+        Funcion para la actualizacion de la barra de progreso
     """
     os.makedirs(output_dir, exist_ok=True)
-    tile_paths = glob(os.path.join(input_dir, "*.tif"))
+    tile_paths = glob(os.path.join(tiles_dir, "*.tif"))
     
     if not tile_paths:
         print("No se encontraron archivos .tif")

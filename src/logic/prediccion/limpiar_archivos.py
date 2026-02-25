@@ -2,6 +2,20 @@ import shutil
 import os
 
 def clean_temp_files(paths: dict) -> bool:
+    """
+    Limpia archivos creados durante la inferencia
+
+    Args
+    ----------
+    paths: dict
+        Diccionario con las rutas a las carpetas creadas durante la inferencia
+
+    Return
+    ----------
+    :bool
+        - True → Se limpio con exito
+        - False → Error al limpiar las carpetas
+    """
     try:
         for key, path in paths.items():
             if key != "gpkg":

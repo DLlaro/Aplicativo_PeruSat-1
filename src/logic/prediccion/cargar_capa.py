@@ -3,9 +3,10 @@ import geopandas as gpd
 from affine import Affine
 from logic.image_loader import SatelliteLoader
 
-def load_vector_to_napari(gpkg_path: str = None, loader: SatelliteLoader = None):
+def load_vector_to_napari(gpkg_path: str = None, 
+                          loader: SatelliteLoader = None) -> dict:
     """
-    Transforma una capa vectorial a coordenadas de píxel relativas al preview del visor.
+    Transforma una capa vectorial a coordenadas de pixel relativas al preview del visor.
 
     Lee un archivo GeoPackage, reproyecta las geometrías al sistema de coordenadas
     de píxel de la imagen de previsualización aplicando la escala del loader,
@@ -20,14 +21,14 @@ def load_vector_to_napari(gpkg_path: str = None, loader: SatelliteLoader = None)
         - loader.transform: 
             matriz affine original del raster.
         - loader.scale_factor: 
-            factor de escala aplicado al preview(ej: 0.2 para escala 5).
+            factor de escala aplicado al preview (ej: 0.2 para escala 5).
 
     Return
     -------
-    dict:
-        - type: 'shapes'
-        - data: list[np.ndarray] — coordenadas en píxeles (row, col)de cada polígono, listas para Napari.
-        - shape_type: 'polygon'
+    :dict
+        - 'type': 'shapes'
+        - 'data': list[np.ndarray] — coordenadas en píxeles (row, col) de cada polígono, listas para Napari.
+        - 'shape_type': 'polygon'
 
     Notas
     -----

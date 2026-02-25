@@ -6,14 +6,30 @@ import geopandas as gpd
 from shapely.geometry import shape
 import numpy as np
 
-def raster_to_vector(mask_path: str, out_dir: str, background_value: int = 0, progress_callback = None):
+from typing import TypeAlias, Callable
+
+ProgressCallback: TypeAlias = Callable[[int, str, str, bool], None]
+
+def raster_to_vector(mask_path: str, 
+                     out_dir: str, 
+                     background_value: int = 0, 
+                     progress_callback: ProgressCallback = None):
     """
     Convierte una máscara raster a un vector (GPKG o Shapefile).
 
-    Args:
-        mask_path (str): Ruta al archivo raster de la máscara.
-        out_dir (str): Directorio donde guardar los archivos vectoriales (GPKG).
-        background_value (int): Valor del fondo a ignorar (por defecto 0).
+    Args
+    ----------
+    mask_path: str
+        Ruta al archivo raster de la máscara.
+    out_dir: str
+        Directorio donde guardar los archivos vectoriales (GPKG).
+    background_value: int
+        Valor del fondo a ignorar (por defecto 0).
+
+    Return
+    ----------
+    path_list: dict
+        Diccionario con las rutas de los archivos gpkg creados
     """
     os.makedirs(out_dir, exist_ok=True)
 
