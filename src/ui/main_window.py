@@ -111,7 +111,8 @@ class MainWindow(QMainWindow):
 
     def _connect_signals(self) -> None:
         self.toolbar.action_open.triggered.connect(self.abrir_archivo)
-        self.toolbar.action_roi.triggered.connect(self.toggle_modo_roi)
+        self.toolbar.action_roi_rect.triggered.connect(lambda: self.toggle_modo_roi(mode="add_rectangle"))
+        self.toolbar.action_roi_poly.triggered.connect(lambda: self.toggle_modo_roi(mode="add_polygon"))
         self.toolbar.action_analyze.triggered.connect(self.analizar_imagen)
         self.toolbar.action_reset.triggered.connect(self.reset)
         self.toolbar.action_config.triggered.connect(self.settings)
@@ -181,11 +182,13 @@ class MainWindow(QMainWindow):
         shape: tuple
             Contiene el alto y ancho del raster H x W  
         """
-        self.status_mgr.show_message(f"Procesando imagen de {shape[1]}x{shape[0]} px...")
 
         dialog = LoadDialog(self, shape)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             escala = dialog.get_values()
+
+            self.status_mgr.show_message(f"Procesando imagen de {shape[1]}x{shape[0]}px  → {shape[1]*(escala/100):.0}x{shape[0]*(escala/100):.0}px ...")
+
             self.cargar_en_visor(escala)
         else:
             print("Carga cancelada.")
@@ -201,30 +204,19 @@ class MainWindow(QMainWindow):
         """
         self.archivo_cargado = False
         try:
-            # --- limpiar visor ---
             self.limpiar_visor()
             
-            # --- cargar la vista previa de la imagen ---
             print("Solicitando imagen al módulo Logic...")
             self.status_mgr.show_progress()
             self.status_mgr.update_progress(0, "Cargando Imagen")
 
-            # Creamos el hilo
             self.worker = LoadImageWorker(loader = self.loader, escala = input_escala)
             
             self.worker.progress_update.connect(self.status_mgr.update_progress)
-            # Conectamos la señal al nuevo método de ventana emergente
             self.worker.status_msg.connect(lambda msg: QMessageBox.warning(self, "Optimizacion de Escala", msg, QMessageBox.StandardButton.Ok) )
-
-            # CUANDO TERMINA EL PROCESO PESADO:
             self.worker.finished.connect(self.finalizar_carga_img)
-            
-            # MANEJO DE ERRORES:
             self.worker.error.connect(lambda msg: QMessageBox.critical(self, "Error", msg))
-
             self.toolbar.set_all_enabled(False)
-
-            # Ejecutar hilo
             self.worker.start()
             
         except Exception as e:
@@ -259,14 +251,14 @@ class MainWindow(QMainWindow):
         # Opcional: solo si ves que la RAM no baja tras muchas imágenes
         gc.collect()
 
-    def toggle_modo_roi(self, activar: bool | None = None) -> None:
+    def toggle_modo_roi(self, activar: bool | None = None, mode: str = "add_rectangle" ) -> None:
         """Alternar el modo de dibujo de ROI."""
         if not self.archivo_cargado:
             QMessageBox.warning(self, "Cargar Imagen", "Carga una imagen para trazar el ROI.")
             self.status_mgr.show_message("No hay imagen cargada.")
             return
 
-        self.roi_manager.activar_herramienta(activar)
+        self.roi_manager.activar_herramienta(activar, mode)
     
     def analizar_imagen(self)  -> None:
         """
@@ -277,6 +269,7 @@ class MainWindow(QMainWindow):
         """
         try:
             es_valido, mensaje = self.roi_manager.validar_roi(
+                self.loader.transform,
                 min_area_km2 = MIN_AREA_KM2, 
                 original_shape = self.loader.get_original_shape()
             )
@@ -307,7 +300,7 @@ class MainWindow(QMainWindow):
                 self.toggle_modo_roi(False)
 
                 self.workerTiler = TilingWorker(loader = self.loader,
-                                                coords=self.roi_manager.coords,
+                                                polygon=self.roi_manager.polygon,
                                                 modelo = self.model, 
                                                 output_dir=analyze_dlg.selected_path)
                 self.workerTiler.progress_update.connect(self.status_mgr.update_progress)
@@ -373,7 +366,9 @@ class MainWindow(QMainWindow):
         return
 
     def _mostrar_resultado_analisis(self, shape_data: object) -> None:
-        """Muestra el resultado del análisis al usuario.
+        """
+        Muestra el resultado del análisis al usuario.
+        Habilita toolbar y oculta el progress bar.
         
         Args
         ----------
@@ -399,15 +394,16 @@ class MainWindow(QMainWindow):
             )
         
         QMessageBox.information(
-            self, 
-            "Analisis completado", 
+            self,
+            "Analisis completado",
             f"Capa vectorial añadida con éxito\n"
         )
-        
         print(f"Capa vectorial añadida con éxito")
 
         self.toolbar.set_all_enabled(True)
         self.status_mgr.hide_progress()
+
+        #self.sidebar_mgr.show_sidebar()
 
     def reset(self) -> None:
         """Limpia la capa ROI"""

@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QToolBar, QStyle
+from PySide6.QtWidgets import QToolBar, QStyle, QMenu
 from PySide6.QtGui import QAction
 from PySide6.QtCore import QSize
 
@@ -22,6 +22,22 @@ class AppToolbar(QToolBar):
             self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView),
             "Dibujar ROI (R)", self
         )
+
+        # 2. Crear el menú desplegable
+        self.menu_roi = QMenu(self)
+
+        # 3. Crear las opciones internas
+        
+        self.action_roi_rect = QAction("Rectángulo", self)
+        self.action_roi_poly = QAction("Polígono", self)
+
+        # 4. Agregar las opciones al menú
+        self.menu_roi.addAction(self.action_roi_rect)
+        self.menu_roi.addAction(self.action_roi_poly)
+
+        # 5. Asignar el menú a la acción principal
+        self.action_roi.setMenu(self.menu_roi)
+
         self.action_roi.setCheckable(True)
         self.action_roi.setShortcut("R")
 
@@ -47,6 +63,9 @@ class AppToolbar(QToolBar):
         self.addAction(self.action_open)
         self.addSeparator()
         self.addAction(self.action_roi)
+        button_roi = self.widgetForAction(self.action_roi)
+        if button_roi:
+            button_roi.setPopupMode(button_roi.ToolButtonPopupMode.InstantPopup)        
         self.addSeparator()
         self.addAction(self.action_analyze)
         self.addSeparator()

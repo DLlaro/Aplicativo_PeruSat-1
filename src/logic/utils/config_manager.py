@@ -46,20 +46,20 @@ class AppConfig:
         self.settings.setValue("model/path", value)
 
     @property
-    def use_gpu(self):
-        return str(self.settings.value("gpu/use_gpu", "False")).lower() == "true"
+    def use_gpu_inference(self):
+        return str(self.settings.value("gpu/use_gpu_inference", "False")).lower() == "true"
 
-    @use_gpu.setter
-    def use_gpu(self, value):
-        self.settings.setValue("gpu/use_gpu", value)
+    @use_gpu_inference.setter
+    def use_gpu_inference(self, value):
+        self.settings.setValue("gpu/use_gpu_inference", value)
 
     @property
-    def total_render(self):
-        return str(self.settings.value("total_render", "False")).lower() == "true"
+    def unlock_render(self):
+        return str(self.settings.value("unlock_render", "False")).lower() == "true"
 
-    @total_render.setter
-    def total_render(self, value):
-        self.settings.setValue("total_render", value)
+    @unlock_render.setter
+    def unlock_render(self, value):
+        self.settings.setValue("unlock_render", value)
 
     @property
     def gpu_info(self):
@@ -79,9 +79,19 @@ class AppConfig:
             self.settings.setValue("gpu/gpu_info", json.dumps(value))
         else:
             print("Error: El valor debe ser un diccionario.")
+
+    @property
+    def max_render(self):
+        return int(self.settings.value("max_render", 10000))
+    
+    @max_render.setter
+    def max_render(self, value):
+        self.settings.setValue("max_render", value)
+        
     @property
     def torch_device(self):
-        return torch.device('cuda' if torch.cuda.is_available() and settings.use_gpu else 'cpu')
+        return torch.device('cuda' if torch.cuda.is_available() and settings.use_gpu_inference else 'cpu')
+
     @property
     def logo_path(self):
         return os.path.join(self.internal_path, "assets", "inei_logo.ico")

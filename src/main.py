@@ -20,9 +20,13 @@ from logic.utils.utils import get_nvidia_info_torch
 def setup_hardware():
     # 1. Actualizamos la info de hardware usando la nueva función de Torch
     settings.gpu_info = get_nvidia_info_torch()
+    if settings.unlock_render:
+        settings.max_render = 20000
+    else:
+        settings.max_render = 10000
     
     # 2. Verificamos si CUDA está disponible según las preferencias
-    if settings.use_gpu and torch.cuda.is_available():
+    if settings.use_gpu_inference and torch.cuda.is_available():
         gpu_name = settings.gpu_info.get("gpu_name", "NVIDIA")
         print(f"Hardware configurado: GPU {gpu_name} activa.")
         
