@@ -30,7 +30,7 @@ TIMEOUT_LONG = 5000
 
 #Image
 MAX_LIMIT_RENDER = 10000
-MAX_LIMIT_RENDER_UNLOCK = 32000 #Could check GPU & RAM of the pc to assign a more accurate value
+MAX_LIMIT_RENDER_UNLOCK = 20000 #Could check GPU & RAM of the pc to assign a more accurate value
 
 #Analize
 MIN_AREA_KM2 = 10

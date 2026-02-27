@@ -1,6 +1,5 @@
 from PySide6.QtWidgets import (QLabel, QVBoxLayout, QHBoxLayout, QWidget, QPushButton, QScrollArea, QFrame)
 from PySide6.QtCore import Qt
-from PySide6 import QtCore
 
 class SideBarManager:
     def __init__(self):
@@ -48,10 +47,8 @@ class SideBarManager:
         self.layout.addWidget(self.scroll)
 
     def add_result(self, label_text, value_text):
-        # The container frame
         entry = QFrame()
         entry.setObjectName("result") 
-        # Force background painting for custom QFrames
         entry.setAttribute(Qt.WidgetAttribute.WA_StyledBackground)
 
         l = QVBoxLayout(entry)
@@ -59,11 +56,11 @@ class SideBarManager:
 
         # Title Label
         title = QLabel(label_text.upper())
-        title.setObjectName("title") # <--- Target this in QSS
+        title.setObjectName("title")
         
         # Value Label
         val = QLabel(str(value_text))
-        val.setObjectName("value") # <--- Target this in QSS
+        val.setObjectName("value")
         val.setWordWrap(True)
 
         l.addWidget(title)
@@ -74,8 +71,7 @@ class SideBarManager:
 
     def limpiar(self):
         """
-        Método 'Atómico': Reemplaza el contenedor completo.
-        Esto evita que Python intente leer memoria (0x0000...1C) 
+        Reemplaza el contenedor completo.
         de widgets que están siendo destruidos.
         """
         self.sidebar.hide()
@@ -91,7 +87,6 @@ class SideBarManager:
         self.content_widget = nuevo_content_widget
         
         print("Sidebar limpiado con éxito (Atomic Swap).")
-        
         
     def show_sidebar(self):
         self.sidebar.show()

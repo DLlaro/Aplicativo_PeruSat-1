@@ -24,14 +24,20 @@ class SettingsDialog(QDialog):
 
         # Sección GPU
         layout.addWidget(QLabel("<b>Hardware:</b>"))
-        self.chk_gpu = QCheckBox("Usar aceleración por GPU (NVIDIA)")
-        self.chk_gpu.setChecked(settings.use_gpu)
+        self.chk_gpu = QCheckBox("Inferencia por GPU (NVIDIA)")
+        self.chk_gpu.setChecked(settings.use_gpu_inference)
+
+        self.chk_render_tot = QCheckBox("Desbloquear renderizado (GPU)")
+        self.chk_render_tot.setChecked(settings.unlock_render)
 
         #Verificar existencia de GPU
-        gpu = settings.gpu_info
-        if gpu['gpu_name']=='CPU' or gpu["total_mb"]<=6144:
-            self.chk_gpu.setText("Usar aceleración por GPU (NVIDIA) (No disponible)")
+        if settings.gpu_info['gpu_name']=='CPU' or settings.gpu_info["total_mb"]<=6144:
+            self.chk_gpu.setText("Inferencia por GPU (NVIDIA) (No disponible)")
             self.chk_gpu.setEnabled(False)
+            self.chk_render_tot.setEnabled(False)
+
+
+        layout.addWidget(self.chk_render_tot)
         layout.addWidget(self.chk_gpu)
 
         # Botones Guardar/Cerrar
@@ -46,5 +52,11 @@ class SettingsDialog(QDialog):
 
     def save_settings(self):
         settings.model_path = self.lbl_path.text()
-        settings.use_gpu = self.chk_gpu.isChecked()
+        settings.use_gpu_inference = self.chk_gpu.isChecked()
+        settings.unlock_render = self.chk_render_tot.isChecked()
+        if settings.unlock_render:
+            settings.max_render = 20000
+        else:
+            settings.max_render = 10000
+        
         self.accept()

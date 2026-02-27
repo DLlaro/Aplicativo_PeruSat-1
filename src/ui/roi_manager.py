@@ -1,6 +1,5 @@
 from napari.components import ViewerModel 
-from constants import (PIXEL_SIZE_PERU_SAT, 
-                       ROI_EDGE_COLOR, 
+from constants import (ROI_EDGE_COLOR, 
                        ROI_EDGE_WIDTH,
                        ROI_FACE_COLOR
                        )
@@ -24,11 +23,12 @@ class ROIManager:
         self.on_data_changed_callback = onDataChanged # Guardamos el callback
         self.isActivated = False
         self.area_km2 = 0.0
-        self.coords: tuple = None
+        self.bounding_box: tuple = None
+        self.polygon = None
 
         self._preparar_capas()
 
-    def _preparar_capas(self):
+    def _preparar_capas(self) -> None:
         """
         Crea la capa una sola vez y la deja lista.
         Conecta la funcion _on_data_changed en caso no lo este.
@@ -50,8 +50,16 @@ class ROIManager:
         except:
             pass
 
-    def activar_herramienta(self, isActivated: bool = None):
-        """Alternar el modo de dibujo del ROI"""
+    def activar_herramienta(self, isActivated: bool = None, mode: str = "add_rectangle") -> None:
+        """
+        Alternar el modo de dibujo del ROI
+        
+        Args
+        ----------
+        isActivated: bool
+            - True → El modo dibujo esta activado
+            - False → El modo dibujo esta desactivado
+        """
         self.isActivated = isActivated if isActivated is not None else not self.isActivated
 
         # Notify UI of toggle state
@@ -59,50 +67,61 @@ class ROIManager:
             self.on_toggle_callback(self.isActivated)
 
         if self.isActivated:
-            self._activar_modo_dibujo()
+            self._activar_modo_dibujo(mode)
         else:
             self._desactivar_modo_dibujo()
 
-    def _activar_modo_dibujo(self):
-        """
-        Activa el modo dibujo. 
-        Crea la capa ROI en caso no exista
-        """
+    def _activar_modo_dibujo(self, mode:str) -> None:
         if self.layer is None or 'ROI' not in self.viewer.layers:
             self._preparar_capas()
 
+        self.layer.data = []
+
         self.layer.visible = True
-        self.layer.mode = 'add_rectangle'
+        self.layer.mode = mode
         self.viewer.cursor.style = 'crosshair'
         self.viewer.layers.selection.active = self.layer
 
-    def _desactivar_modo_dibujo(self):
+    def _desactivar_modo_dibujo(self) -> None:
         """Sale del modo de dibujo"""
         self.viewer.cursor.style = 'standard'
         self.viewer.layers.selection.clear()
 
     def _on_data_changed(self, event):
-        """
-        Mantiene el rectangulo dibujado más reciente
-        si se dibuja otro.
-        Notifica a on_data_changed_callback del cambio.
-        """
-        if self.layer is None or self._updating:
+
+        if self.layer is None:
             return
-        
-        if len(self.layer.data) > 1:
-            self._updating = True
-            try:
-                self.layer.data = self.layer.data[-1:]
-            finally:
-                self._updating = False
+
+        if len(self.layer.data) == 0:
+            self.bounding_box = None
+            if self.on_data_changed_callback:
+                self.on_data_changed_callback(False)
+            return
+        # Solo tomar el último polígono
+        self.polygon = self.layer.data[-1]
+        print(self.polygon)
+
+        rows = self.polygon[:, 0]
+        cols = self.polygon[:, 1]
+
+        min_x = cols.min()
+        max_x = cols.max()
+        min_y = rows.min()
+        max_y = rows.max()
+
+        self.bounding_box = (
+            int(min_x),
+            int(min_y),
+            int(max_x - min_x),
+            int(max_y - min_y),
+        )
 
         if self.on_data_changed_callback:
-            self.on_data_changed_callback(len(self.layer.data) > 0)
+            self.on_data_changed_callback(True)
 
-    def limpiar(self):
+    def limpiar(self) -> None:
         """
-        Limpia los datos de la capa ROI y oculta la capa.
+        Limpia los datos de la capa ROI, desactiva modo dibujo y oculta la capa.
         """
         if self.layer is not None:
             self._updating = True
@@ -126,13 +145,13 @@ class ROIManager:
         
         Return
         ----------
-        bool
-            True → Existen datos en la capa
-            False → No existen datos en la capa
+        :bool
+            - True → Existen datos en la capa
+            - False → No existen datos en la capa
         """
         return self.layer is not None and len(self.layer.data) > 0
     
-    def validar_roi(self, min_area_km2=10, original_shape=None, tolerance=512):
+    def validar_roi(self, transform, min_area_km2=10, original_shape=None, tolerance=512) -> bool | str:
         """
         Valida el ROI calculando la intersección real con la imagen.
 
@@ -142,23 +161,23 @@ class ROIManager:
 
         Args
         ----------
+        transfrom: 
+            Matriz de transformación afin del raster
         min_area_km2 : float, optional
             Área mínima aceptable en km² para el ROI (por defecto 10 km²).
             Se calcula usando solo los píxeles que caen dentro de la imagen.
         original_shape : tuple[int, int]
-            Dimensiones de la imagen original en formato (alto, ancho) en píxeles,
-            equivalente a img.shape[:2] en OpenCV/NumPy.
+            Dimensiones de la imagen original en formato (alto, ancho) en píxeles.
         tolerance : int, optional
             Máximo de píxeles que la selección puede desbordar por cada lado
             individual (izquierda, derecha, arriba, abajo) antes de ser rechazada.
-            Por defecto 512 px.
 
         Return
         -------
-        tuple[bool, str]
-            (True, area_km2_str)  → ROI válido. El string contiene el área útil
+        :bool, str
+            - True, area_km2_str  → ROI válido. El string contiene el área útil
                                     en km² con 2 decimales, ej: "15.43".
-            (False, mensaje)      → ROI inválido. El string describe el motivo
+            - False, mensaje      → ROI inválido. El string describe el motivo
                                     del rechazo.
         """
         if self.coords is None:
@@ -186,7 +205,7 @@ class ROIManager:
 
         # A. Verificar si hay solapamiento
         if true_w <= 0 or true_h <= 0:
-            return (False, "El área seleccionada está completamente fuera de la imagen.")
+            return False, "El área seleccionada está completamente fuera de la imagen."
 
         # B. Verificar pérdida por desborde por lado
         overflow_left   = max(0, -draw_x1)          # píxeles fuera por la izquierda
@@ -202,16 +221,19 @@ class ROIManager:
 
         if exceeded:
             lados = ", ".join(exceeded)
-            return (False, f"La selección se sale demasiado por: {lados}.")
+            return False, f"La selección se sale demasiado por: {lados}."
 
         # C. Validar área mínima con los píxeles REALES (intersección)
-        area_m2 = true_w * true_h * (PIXEL_SIZE_PERU_SAT ** 2)
+        res_x = abs(transform.a)
+        res_y = abs(transform.e)
+
+        area_m2 = true_w * true_h * (res_x * res_y)
         self.area_km2 = area_m2 / 1_000_000 
 
         if self.area_km2 < min_area_km2:
-            return (False, f"Área útil insuficiente: {self.area_km2:.2f} km²")
+            return False, f"Área útil insuficiente: {self.area_km2:.2f} km²"
 
         # Guardamos las coordenadas recortadas (clipping) para que el Crop sea seguro
         self.coords = (inter_x1, inter_y1, true_w, true_h)
 
-        return (True, f"{self.area_km2:.2f}")
+        return True, f"{self.area_km2:.2f}"

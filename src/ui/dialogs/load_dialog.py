@@ -13,13 +13,14 @@ class LoadDialog(QDialog):
         self.resize(350, 150)
         self.h = shape[0]
         self.w = shape[1]
+        self.max_scale = min(((settings.max_render - 500) / max(self.w, self.h)*100), 100)
+        print(settings.max_render)
         
         self._setup_ui()
         self._update_dimensions()
     
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        gpu_info = settings.gpu_info
         ram: dict = get_ram_info()
 
         # Crear contenedor
@@ -36,26 +37,28 @@ class LoadDialog(QDialog):
         scale_layout.addWidget(QLabel("Calidad de la imagen:"))
         
         self.spin_escala = QSpinBox()
-        self.spin_escala.setRange(10, 50)  # Default range without GPU
-        self.spin_escala.setSingleStep(10)
+        self.spin_escala.setRange(10, self.max_scale )  # Default range without GPU
+        self.spin_escala.setSingleStep(5)
         self.spin_escala.setSuffix("%")
-        self.spin_escala.setValue(40)
+        self.spin_escala.setValue(self.max_scale/2)
         self.spin_escala.setToolTip("10-50%: Sin GPU, 10-100%: Con GPU")
-
-        self.spin_escala.valueChanged.connect(self._on_spin_changed)
 
         scale_layout.addWidget(self.spin_escala)
 
-        if settings.use_gpu:
-            if not gpu_info["gpu_name"]=="CPU" and ram["available_mb"] >= 8192:
-                print("GPU potente disponible")
-                layout.addWidget(self._gpu_specs(frame, gpu_info))
-                self._unlock_scale()  
-        elif self.w < MAX_LIMIT_RENDER and self.h < MAX_LIMIT_RENDER:
+        gpu_available = (
+            settings.use_gpu_inference
+            and settings.gpu_info["gpu_name"] != "CPU"
+            and ram["available_mb"] >= 8192
+        )
+
+        if gpu_available:
+            print("GPU potente disponible")
+            layout.addWidget(self._gpu_specs(frame, settings.gpu_info))
+
+        if gpu_available and settings.unlock_render:
             self._unlock_scale()
         else:
             self._lock_scale()
-
         
         ## Redimension 
         # Scale factor
@@ -64,9 +67,9 @@ class LoadDialog(QDialog):
         diemensiones_layout.addWidget(QLabel("Original:"))
         original_shape_layout = QHBoxLayout()
         original_w = QLineEdit(str(self.w))
-        original_w.setReadOnly(True)
+        original_w.setEnabled(False)
         original_h = QLineEdit(str(self.h))
-        original_h.setReadOnly(True)
+        original_h.setEnabled(False)
 
         original_shape_layout.addWidget(QLabel("Ancho:"))
         original_shape_layout.addWidget(original_w)
@@ -78,9 +81,9 @@ class LoadDialog(QDialog):
         diemensiones_layout.addWidget(QLabel("Redimensión:"))
         redimension_shape_layout = QHBoxLayout()
         self.redim_w = QLineEdit(str(self.w))
-        self.redim_w.setReadOnly(True)
+        self.redim_w.setEnabled(False)
         self.redim_h = QLineEdit(str(self.h))
-        self.redim_h.setReadOnly(True)
+        self.redim_h.setEnabled(False)
 
         redimension_shape_layout.addWidget(QLabel("Ancho:"))
         redimension_shape_layout.addWidget(self.redim_w)
@@ -106,6 +109,9 @@ class LoadDialog(QDialog):
         
         layout.addLayout(btn_layout)
 
+        ##Connections
+        self.spin_escala.valueChanged.connect(self._on_spin_changed)
+
     def _ram_specs(self, frame: QFrame, ram):
         frame_layout_ram = QVBoxLayout(frame)
         frame_layout_ram.addWidget(
@@ -123,17 +129,16 @@ class LoadDialog(QDialog):
         )
         return frame        
     
-    def _unlock_scale(self):
-        self.spin_escala.setRange(10, 100)
-        self.spin_escala.setToolTip("100%: Original, 10-90: Reducido")
+    def _unlock_scale(self):       
+        self.spin_escala.setRange(10, self.max_scale)
+        self.spin_escala.setToolTip(f"10%: Original, {self.max_scale}%: Max permitido")
 
     def _lock_scale(self):
         current = self.spin_escala.value()
-        self.spin_escala.setRange(10, 50)
+        self.spin_escala.setRange(10, self.max_scale)
         
-        # Adjust current value if it's out of range
-        if current < 50:
-            self.spin_escala.setValue(40)
+        if current < self.max_scale:
+            self.spin_escala.setValue(self.max_scale/2)
         
         self.spin_escala.setToolTip("10-50%: Sin GPU")
 
@@ -141,7 +146,7 @@ class LoadDialog(QDialog):
         self._update_dimensions()
 
     def _update_dimensions(self):
-        scale = self.spin_escala.value() / 100
+        scale = self.spin_escala.value() / 100 # obtener el valor en decimal
         new_w = int(self.w * scale)
         new_h = int(self.h * scale)
 
@@ -149,5 +154,5 @@ class LoadDialog(QDialog):
         self.redim_h.setText(str(new_h))
     
     def get_values(self):
-        """Returns (escala, use_gpu)"""
+        """Returns (escala, use_gpu_inference)"""
         return self.spin_escala.value()

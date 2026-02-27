@@ -39,7 +39,7 @@ def cargar_recargar_modelo(model: BuildingRoadModel | None = None) -> tuple[bool
             return False, None, "Archivo no encontrado"
         
         # 1. Cargamos el diccionario (checkpoint)
-        checkpoint = torch.load(nueva_ruta, map_location=settings.torch_device)
+        checkpoint = torch.load(nueva_ruta, map_location=settings.torch_device, weights_only=True)
         
         # 2. Instanciamos la arquitectura vacía
         model = BuildingRoadModel("Unet", "resnet34", in_channels=3, out_classes=3)

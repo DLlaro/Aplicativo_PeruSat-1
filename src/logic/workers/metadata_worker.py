@@ -20,7 +20,7 @@ class MetadataWorker(BaseWorker):
             Tupla con los valores alto (height) y ancho (width) del raster
         """
         try:
-            shape = self.loader.get_metadata(self.file_path)
+            shape = self.loader.load_metadata(self.file_path)
             self.finished.emit(shape)
         except Exception as e:
             self.error.emit(str(e))
