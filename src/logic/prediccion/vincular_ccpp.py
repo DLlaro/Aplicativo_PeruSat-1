@@ -259,18 +259,12 @@ def link_buildings_to_ccpp(
 
     buildings_out.to_file(output_gpkg, layer="buildings_vinculados", driver="GPKG")
     dissolved.to_file(output_gpkg, layer="ccpp_disueltos", driver="GPKG")
-    dissolved.to_crs(distance_crs).to_file(
-        output_gpkg,
-        layer="ccpp_disueltos_dist_m",
-        driver="GPKG",
-    )
 
     _emit(progress_callback, 100, "Vinculacion completada.")
     return {
         "output_gpkg": output_gpkg,
         "buildings_layer": "buildings_vinculados",
         "dissolved_layer": "ccpp_disueltos",
-        "dissolved_layer_distance": "ccpp_disueltos_dist_m",
         "distance_crs": str(distance_crs),
         "distance_threshold_m": float(distance_threshold_m),
     }
