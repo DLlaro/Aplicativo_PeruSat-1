@@ -4,6 +4,21 @@ import torch
 from logic.modelo.model_architecture import BuildingRoadModel
 from logic.utils.config_manager import settings
 
+def _infer_out_classes(state_dict: dict) -> int:
+    """
+    Intenta inferir numero de clases desde la capa de salida del checkpoint.
+    Retorna 1 por defecto (flujo binario actual).
+    """
+    candidate_keys = (
+        "model.segmentation_head.0.weight",
+        "segmentation_head.0.weight",
+    )
+    for key in candidate_keys:
+        weight = state_dict.get(key)
+        if hasattr(weight, "shape") and len(weight.shape) >= 1:
+            return int(weight.shape[0])
+    return 1
+
 def cargar_recargar_modelo(model: BuildingRoadModel | None = None) -> tuple[bool, BuildingRoadModel, str]:
     """
     Libera el modelo previo de memoria y carga uno nuevo desde disco.
@@ -38,16 +53,25 @@ def cargar_recargar_modelo(model: BuildingRoadModel | None = None) -> tuple[bool
             model = None
             return False, None, "Archivo no encontrado"
         
-        # 1. Cargamos el diccionario (checkpoint)
-        checkpoint = torch.load(nueva_ruta, map_location=settings.torch_device, weights_only=True)
-        
-        # 2. Instanciamos la arquitectura vacía
-        model = BuildingRoadModel("Unet", "resnet34", in_channels=3, out_classes=3)
-        
-        # 3. Extraemos los pesos del diccionario
-        if 'state_dict' in checkpoint:
-            model.load_state_dict(checkpoint['state_dict'])
-            print(f"Pesos cargados. Mejor pérdida registrada: {checkpoint.get('best_val_loss', 'N/A')}")
+        checkpoint = torch.load(
+            nueva_ruta,
+            map_location=settings.torch_device,
+            weights_only=True,
+        )
+
+        state_dict = checkpoint["state_dict"] if isinstance(checkpoint, dict) and "state_dict" in checkpoint else checkpoint
+        out_classes = _infer_out_classes(state_dict if isinstance(state_dict, dict) else {})
+
+        model = BuildingRoadModel("Unet", "resnet34", in_channels=3, out_classes=out_classes)
+
+        if not isinstance(state_dict, dict):
+            return False, None, "Formato de checkpoint no soportado"
+
+        is_wrapper_state = any(k.startswith("model.") or k in ("mean", "std") for k in state_dict.keys())
+
+        if is_wrapper_state:
+            model.load_state_dict(state_dict)
+            print(f"Pesos cargados. Mejor perdida registrada: {checkpoint.get('best_val_loss', 'N/A') if isinstance(checkpoint, dict) else 'N/A'}")
         else:
             # El checkpoint es solo el state_dict de smp.Unet (sin wrapper Lightning)
             model.model.load_state_dict(checkpoint)

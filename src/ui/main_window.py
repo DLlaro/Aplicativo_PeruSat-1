@@ -187,7 +187,7 @@ class MainWindow(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             escala = dialog.get_values()
 
-            self.status_mgr.show_message(f"Procesando imagen de {shape[1]}x{shape[0]}px  → {shape[1]*(escala/100):.0}x{shape[0]*(escala/100):.0}px ...")
+            self.status_mgr.show_message(f"Procesando imagen de {shape[1]}x{shape[0]}px  → {(shape[1]*(escala/100)):.0}x{(shape[0]*(escala/100)):.0}px ...")
 
             self.cargar_en_visor(escala)
         else:
@@ -300,7 +300,7 @@ class MainWindow(QMainWindow):
                 self.toggle_modo_roi(False)
 
                 self.workerTiler = TilingWorker(loader = self.loader,
-                                                polygon=self.roi_manager.polygon,
+                                                coords=self.roi_manager.coords,
                                                 modelo = self.model, 
                                                 output_dir=analyze_dlg.selected_path)
                 self.workerTiler.progress_update.connect(self.status_mgr.update_progress)

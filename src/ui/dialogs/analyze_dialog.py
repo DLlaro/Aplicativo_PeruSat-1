@@ -38,6 +38,7 @@ class AnalyzeDialog(QDialog):
         main_layout = QVBoxLayout()
 
         area = float(area)
+        print("sale de area")
 
         area_lb = QLabel(f"Área a analizar: {area:.2f} km².")
         main_layout.addWidget(area_lb)

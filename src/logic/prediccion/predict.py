@@ -14,7 +14,8 @@ ProgressCallback: TypeAlias = Callable[[int, str, str, bool], None]
 
 def predict_tiles_multiclase(tiles_dir: str, 
                              output_dir: str, 
-                             model: BuildingRoadModel, 
+                             model: BuildingRoadModel,
+                             threshold: float = 0.5, 
                              progress_callback: ProgressCallback = None) -> None:
     """
     Se configura el modelo a modo evaluacion y a usar el dispositivo permitido 'CPU' o 'GPU',
@@ -69,9 +70,12 @@ def predict_tiles_multiclase(tiles_dir: str,
             # 3. Inferencia
             with torch.inference_mode():
                 logits = model(image_t)
-                # Softmax + Argmax para multiclase
-                probs = torch.softmax(logits, dim=1)
-                mask_t = torch.argmax(probs, dim=1).squeeze(0)
+                if logits.shape[1] == 1:
+                    probs = torch.sigmoid(logits).squeeze(0).squeeze(0)
+                    mask_t = (probs > threshold).to(torch.uint8)
+                else:
+                    probs = torch.softmax(logits, dim=1)
+                    mask_t = torch.argmax(probs, dim=1).squeeze(0).to(torch.uint8)
                 mask_class = mask_t.cpu().numpy().astype(np.uint8)
 
             # 4. Guardar máscara con Rasterio
@@ -79,6 +83,7 @@ def predict_tiles_multiclase(tiles_dir: str,
                 "driver": "GTiff",
                 "count": 1,
                 "dtype": "uint8",
+                "nodata": 0,
                 "compress": "lzw"
             })
             

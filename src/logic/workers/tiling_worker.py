@@ -12,12 +12,12 @@ class TilingWorker(BaseWorker):
 
     def __init__(self, 
                  loader: SatelliteLoader,
-                 polygon: None, 
+                 coords: tuple, 
                  modelo: BuildingRoadModel, 
                  output_dir: str) -> None:
         super().__init__()
         self.loader = loader
-        self.polygon = polygon
+        self.coords = coords
         self.modelo = modelo
         self.output_path = output_dir
 
@@ -51,7 +51,7 @@ class TilingWorker(BaseWorker):
                     os.makedirs(path, exist_ok=True)
 
                 print("\n[1/5] Generando tiles...")
-                roi_to_tiles(polygon = self.polygon,
+                roi_to_tiles(coords = self.coords,
                             scale_factor = 1/self.loader.scale_factor,
                             tif_name = TIF_ID,
                             loader = self.loader,

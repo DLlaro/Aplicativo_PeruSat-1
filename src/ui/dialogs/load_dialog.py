@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
-                               QSpinBox, QPushButton, QLineEdit, QFrame)
+                               QSpinBox, QPushButton, QLineEdit, QFrame, QFileDialog)
 
 from logic.utils.utils import get_ram_info
 from logic.utils.config_manager import settings
@@ -10,7 +10,7 @@ class LoadDialog(QDialog):
     def __init__(self, parent = None, shape: tuple = None):
         super().__init__(parent)
         self.setWindowTitle("Configuración de Carga")
-        self.resize(350, 150)
+        self.resize(450, 150)
         self.h = shape[0]
         self.w = shape[1]
         self.max_scale = min(((settings.max_render - 500) / max(self.w, self.h)*100), 100)
@@ -94,6 +94,18 @@ class LoadDialog(QDialog):
 
         layout.addLayout(scale_layout)
         layout.addLayout(diemensiones_layout)
+
+        # Ruta a la capa de vivienda
+
+        layout.addWidget(QLabel("<b>Capa de Viviendas del área:</b>"))
+        h_layout = QHBoxLayout()
+        self.lbl_viviendas_path = QLineEdit(settings.model_path)
+        self.lbl_viviendas_path.setEnabled(False)
+        btn_browse = QPushButton("Explorar...")
+        btn_browse.clicked.connect(self._browse_capa_viviendas)
+        h_layout.addWidget(self.lbl_viviendas_path,8)
+        h_layout.addWidget(btn_browse,2)
+        layout.addLayout(h_layout)
         
         # Buttons
         btn_layout = QHBoxLayout()
@@ -152,6 +164,16 @@ class LoadDialog(QDialog):
 
         self.redim_w.setText(str(new_w))
         self.redim_h.setText(str(new_h))
+
+    def _browse_capa_viviendas(self):
+        viviendas_path, _ = QFileDialog.getOpenFileName(
+            self, "Abrir SHP, GPKG","", "GPKG (*.shp *.gpkg)",
+        )
+        
+        if viviendas_path:
+            self.lbl_viviendas_path.setText(viviendas_path)
+        else:
+            return
     
     def get_values(self):
         """Returns (escala, use_gpu_inference)"""

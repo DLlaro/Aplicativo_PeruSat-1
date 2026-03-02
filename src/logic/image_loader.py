@@ -116,7 +116,7 @@ class SatelliteLoader:
 
                 self.compute_global_percentiles_stream_per_band()
 
-            return self._normalize_percentiles_per_band(data, progress_callback= progress_callback) / 255 # division entre 255 porque visor requiere valores entre 0-1
+            return self._normalize_percentiles_per_band(data, progress_callback= progress_callback)/255 # division entre 255 porque visor requiere valores entre 0-1
 
         except Exception as e:
             print(f"Error en image loader: {e}")
@@ -127,7 +127,7 @@ class SatelliteLoader:
         self.global_hi = np.load(r"C:\PI\Programa\Aplicativo_PeruSat-1\src\assets\valores_normalizados\percentiles_hi.npy")
 
     def _normalize_percentiles_per_band(self, x: NDArray,
-                                    nodata_value: int =0,
+                                    nodata_value: int =None,
                                     progress_callback: ProgressCallback = None) -> NDArray[uint8]:
         """
         Normaliza la imagen por banda del raster usando los percentiles calculados
@@ -139,6 +139,10 @@ class SatelliteLoader:
         nodata_value: int
             valor de NoData en el raster
         """
+        if x.dtype == np.uint8 and x.max() <= 255:
+            print("La imagen ya está en uint8. Saltando normalización.")
+            return x
+        
         x_norm = np.zeros_like(x, dtype = np.float32)
         for b in range(x.shape[-1]):
             band = x[..., b]
@@ -155,7 +159,8 @@ class SatelliteLoader:
         out = (x_norm * 254 + 1).astype(np.uint8)## convertir valores cercanos a 0 a 1 para que no sean tratados como nodata
         
         if nodata_value is not None:
-            valid_mask = np.all(x != nodata_value, axis=-1)
+            # Un pixel es valido si al menos una banda es distinta de nodata
+            valid_mask = np.any(x != nodata_value, axis=-1)
             out[~valid_mask] = 0
         
         return out
