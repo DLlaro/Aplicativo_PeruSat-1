@@ -97,15 +97,15 @@ class LoadDialog(QDialog):
 
         # Ruta a la capa de vivienda
 
-        layout.addWidget(QLabel("<b>Capa de Viviendas del área:</b>"))
-        h_layout = QHBoxLayout()
-        self.lbl_viviendas_path = QLineEdit(settings.model_path)
-        self.lbl_viviendas_path.setEnabled(False)
-        btn_browse = QPushButton("Explorar...")
-        btn_browse.clicked.connect(self._browse_capa_viviendas)
-        h_layout.addWidget(self.lbl_viviendas_path,8)
-        h_layout.addWidget(btn_browse,2)
-        layout.addLayout(h_layout)
+        #layout.addWidget(QLabel("<b>Capa de Viviendas del área:</b>"))
+        #h_layout = QHBoxLayout()
+        #self.lbl_viviendas_path = QLineEdit(settings.model_path)
+        #self.lbl_viviendas_path.setEnabled(False)
+        #btn_browse = QPushButton("Explorar...")
+        #btn_browse.clicked.connect(self._browse_capa_viviendas)
+        #h_layout.addWidget(self.lbl_viviendas_path,8)
+        #h_layout.addWidget(btn_browse,2)
+        #layout.addLayout(h_layout)
         
         # Buttons
         btn_layout = QHBoxLayout()
@@ -164,17 +164,7 @@ class LoadDialog(QDialog):
 
         self.redim_w.setText(str(new_w))
         self.redim_h.setText(str(new_h))
-
-    def _browse_capa_viviendas(self):
-        viviendas_path, _ = QFileDialog.getOpenFileName(
-            self, "Abrir SHP, GPKG","", "GPKG (*.shp *.gpkg)",
-        )
-        
-        if viviendas_path:
-            self.lbl_viviendas_path.setText(viviendas_path)
-        else:
-            return
     
     def get_values(self):
         """Returns (escala, use_gpu_inference)"""
-        return self.spin_escala.value()
+        return self.spin_escala.value() #, self.lbl_viviendas_path

@@ -75,6 +75,7 @@ class MainWindow(QMainWindow):
         self.modelo_cargado = False
 
         self.model = None
+        self.viviendas_path = None
 
         exito, self.model , msg = cargar_recargar_modelo()
         self.modelo_cargado = exito
@@ -162,7 +163,7 @@ class MainWindow(QMainWindow):
         Instancia un worker para cargar la metadata de la imagen.
         """
         raster_path, _ = QFileDialog.getOpenFileName(
-            self, "Abrir Raster","", "GeoTIFF (*.tif *.tiff)",
+            self, "Seleccionar Image","", "TIFF (*.tif *.tiff)",
         )
         
         if not raster_path:
@@ -419,3 +420,16 @@ class MainWindow(QMainWindow):
             exito, self.model , msg = cargar_recargar_modelo(self.model)
             self.modelo_cargado = exito
             self.status_mgr.show_message(msg, TIMEOUT_LONG if exito else TIMEOUT_MEDIUM)
+
+    def buscar_capa(self) -> None:
+        raster_path, _ = QFileDialog.getOpenFileName(
+            self, "Abrir Raster","", "GeoTIFF (*.tif *.tiff)",
+        )
+        
+        if not raster_path:
+            return # El usuario canceló el explorador
+
+        self.workerMetadata = MetadataWorker(loader = self.loader, file_path = raster_path)
+        self.workerMetadata.finished.connect(lambda shape: self.mostrar_load_dialog(shape))
+        self.workerMetadata.error.connect(lambda msg: QMessageBox.critical(self, "Error", msg))
+        self.workerMetadata.start()

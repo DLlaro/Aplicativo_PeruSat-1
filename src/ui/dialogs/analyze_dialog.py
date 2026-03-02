@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import (QDialog, QHBoxLayout, QVBoxLayout, QDialogButtonBox, QLabel, QLineEdit, QPushButton, QStyle)
+from PySide6.QtWidgets import (QDialog, QHBoxLayout, QVBoxLayout, QLabel, QLineEdit, QPushButton, QStyle, QRadioButton, QFileDialog, QFrame)
 
 AREA_LIMITE = 20
 
@@ -38,10 +38,19 @@ class AnalyzeDialog(QDialog):
         main_layout = QVBoxLayout()
 
         area = float(area)
-        print("sale de area")
 
         area_lb = QLabel(f"Área a analizar: {area:.2f} km².")
         main_layout.addWidget(area_lb)
+
+        # Seccion de capa de viviendas
+        #------------------------------
+        self.rbtn_cpp = QRadioButton("Delimitar CCPP Rurales")
+        main_layout.addWidget(self.rbtn_cpp)
+        self.rbtn_cpp.toggled.connect(lambda checked: self.update_rbtn(main_layout, checked))
+
+        self.rbtn_crecimiento = QRadioButton("Analizar crecimiento")
+        main_layout.addWidget(self.rbtn_crecimiento)
+        self.rbtn_crecimiento.toggled.connect(lambda checked: self.update_rbtn(main_layout, checked))
 
         if(area > AREA_LIMITE):
             mensaje = f"\nAdvertencia: Extensión grande, puede tardar más tiempo del esperado."
@@ -76,6 +85,39 @@ class AnalyzeDialog(QDialog):
             if result:
                 self.selected_path = result
                 self.lineEdit.setText(result) #setear el path al qline
+
+    def update_rbtn(self, parent: QVBoxLayout, checked: bool):
+        # Limpiar widgets anteriores
+        while parent.count():
+            item = parent.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+        if checked:
+            parent.addWidget(self.capa_vivienda_ui(checked))
+
+    def capa_vivienda_ui(self, activate: bool):
+        vivienda_ui_frame = QFrame()
+        h_layout = QHBoxLayout(vivienda_ui_frame)
+        h_layout.addWidget(QLabel("<b>Capa de Viviendas del área:</b>"))
+        self.lbl_viviendas_path = QLineEdit("")
+        self.lbl_viviendas_path.setEnabled(False)
+        btn_browse = QPushButton("Explorar...")
+        btn_browse.clicked.connect(self._browse_capa_viviendas)
+        h_layout.addWidget(self.lbl_viviendas_path, 8)
+        h_layout.addWidget(btn_browse, 2)
+        return vivienda_ui_frame
+
+    def _browse_capa_viviendas(self):
+        viviendas_path, _ = QFileDialog.getOpenFileName(
+            self, "Abrir SHP, GPKG","", "GPKG (*.shp *.gpkg)",
+        )
+        
+        if viviendas_path:
+            self.lbl_viviendas_path.setText(viviendas_path)
+        else:
+            return
 
     def accept(self):
         """Sobrescribir accept para capturar el valor del QLineEdit"""
