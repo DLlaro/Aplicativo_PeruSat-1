@@ -79,7 +79,14 @@ class TilingWorker(BaseWorker):
                                               progress_callback=self.progress)
 
                 print("\n[5/5] Cargando resultados...")
-                shape = load_vector_to_napari(gpkg_paths[1], self.loader)
+                if not gpkg_paths:
+                    raise RuntimeError("No se generaron capas vectoriales para cargar en el visor.")
+
+                buildings_path = next(
+                    (p for p in gpkg_paths if os.path.basename(p).endswith("_buildings.gpkg")),
+                    gpkg_paths[0]
+                )
+                shape = load_vector_to_napari(buildings_path, self.loader)
 
             self.finished.emit(shape)
         except Exception as e:

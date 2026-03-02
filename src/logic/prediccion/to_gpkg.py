@@ -1,72 +1,60 @@
 import glob
 import os
+from typing import Callable, TypeAlias
+
+import geopandas as gpd
 import rasterio
 from rasterio.features import shapes
-import geopandas as gpd
 from shapely.geometry import shape
-import numpy as np
-
-from typing import TypeAlias, Callable
 
 ProgressCallback: TypeAlias = Callable[[int, str, str, bool], None]
 
-def raster_to_vector(mask_path: str, 
-                     out_dir: str, 
-                     background_value: int = 0, 
-                     progress_callback: ProgressCallback = None):
+
+def raster_to_vector(
+    mask_path: str,
+    out_dir: str,
+    background_value: int = 0,
+    progress_callback: ProgressCallback = None,
+):
     """
-    Convierte una máscara raster a un vector (GPKG o Shapefile).
-
-    Args
-    ----------
-    mask_path: str
-        Ruta al archivo raster de la máscara.
-    out_dir: str
-        Directorio donde guardar los archivos vectoriales (GPKG).
-    background_value: int
-        Valor del fondo a ignorar (por defecto 0).
-
-    Return
-    ----------
-    path_list: dict
-        Diccionario con las rutas de los archivos gpkg creados
+    Convierte mascaras raster en capas vectoriales GPKG.
     """
     os.makedirs(out_dir, exist_ok=True)
-
-    count = 0
 
     if progress_callback:
         progress_callback(0, "Vectorizando...")
 
     path_list = []
+    tif_paths = sorted(glob.glob(os.path.join(mask_path, "*.tif")))
+    total = len(tif_paths)
 
-    for tif in glob.glob(f"{mask_path}/*.tif"):
+    for count, tif in enumerate(tif_paths, start=1):
         nombre = os.path.splitext(os.path.basename(tif))[0]
-        salida = f"{out_dir}/{nombre}.gpkg"
+        salida = os.path.join(out_dir, f"{nombre}.gpkg")
+
         with rasterio.open(tif) as src:
             mask = src.read(1)
             transform = src.transform
             crs = src.crs
 
-        # Crear máscara booleana ignorando el fondo
         mask_bool = mask != background_value
         shapes_generator = shapes(mask, mask=mask_bool, transform=transform)
+        geoms = [
+            {"geometry": shape(geom), "class_value": int(value)}
+            for geom, value in shapes_generator
+        ]
 
-        # Convertir a GeoDataFrame
-        geoms = [{'geometry': shape(geom), 'class_value': int(value)} 
-                for geom, value in shapes_generator]
+        if geoms:
+            gdf = gpd.GeoDataFrame(geoms, crs=crs)
+        else:
+            gdf = gpd.GeoDataFrame(columns=["class_value", "geometry"], geometry="geometry", crs=crs)
 
-        gdf = gpd.GeoDataFrame(geoms, crs=crs)
-
-        # Guardar a archivo vectorial
-        gdf.to_file(f"{salida}", driver="GPKG")
+        gdf.to_file(salida, driver="GPKG")
         print(f"Vectorizado guardado en {salida}")
         path_list.append(salida)
 
-        count += 1
-
-        if progress_callback:
-                progress = int((count / len(glob.glob(f"{mask_path}/*.tif"))) * 100)
-                progress_callback(progress, f"Generando capa vectorial:")
+        if progress_callback and total > 0:
+            progress = int((count / total) * 100)
+            progress_callback(progress, "Generando capa vectorial:")
 
     return path_list
