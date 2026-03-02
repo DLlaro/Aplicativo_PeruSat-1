@@ -163,9 +163,11 @@ def roi_to_tiles(
 
                     # Calcular fracción de nodata
                     # Como el tile ya tiene el tamaño final, el cálculo es directo
-                    valid_pixels = tile_size * tile_size * len(loader.bands)
-                    nodata_pixels = (tile == nodata_value).sum()
-                    nodata_fraction = nodata_pixels / valid_pixels
+                    if nodata_value is not None:
+                        nodata_mask = np.all(tile == nodata_value, axis=0)
+                        nodata_fraction = float(nodata_mask.mean())
+                    else:
+                        nodata_fraction = 0.0
 
                     #if nodata_fraction > nodata_threshold:
                     #    continue
@@ -174,7 +176,10 @@ def roi_to_tiles(
                     else:
                         raise ValueError("TIF must have at least 3 bands (RGB).")
 
-                    tile_rgb_8bit = loader._normalize_percentiles_per_band(tile_rgb)
+                    tile_rgb_8bit = loader._normalize_percentiles_per_band(
+                        tile_rgb,
+                        nodata_value=nodata_value
+                    )
 
                     tile_rgb_8bit[~local_mask] = 0
 

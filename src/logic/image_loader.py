@@ -155,7 +155,8 @@ class SatelliteLoader:
         out = (x_norm * 254 + 1).astype(np.uint8)## convertir valores cercanos a 0 a 1 para que no sean tratados como nodata
         
         if nodata_value is not None:
-            valid_mask = np.all(x != nodata_value, axis=-1)
+            # Un pixel es valido si al menos una banda es distinta de nodata
+            valid_mask = np.any(x != nodata_value, axis=-1)
             out[~valid_mask] = 0
         
         return out
