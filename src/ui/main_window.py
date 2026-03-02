@@ -267,12 +267,10 @@ class MainWindow(QMainWindow):
             self.toolbar.set_all_enabled(False)
             self.toggle_modo_roi(False)
 
-            self.workerTiler = TilingWorker(
-                loader=self.loader,
-                polygon=polygon,
-                modelo=self.model,
-                output_dir=analyze_dlg.selected_path,
-            )
+            self.workerTiler = TilingWorker(loader = self.loader,
+                                                coords=self.roi_manager.coords,
+                                                modelo = self.model, 
+                                                output_dir=analyze_dlg.selected_path)
             self.workerTiler.progress_update.connect(self.status_mgr.update_progress)
             self.workerTiler.error.connect(self._on_worker_error)
             self.workerTiler.finished.connect(self._mostrar_resultado_analisis)

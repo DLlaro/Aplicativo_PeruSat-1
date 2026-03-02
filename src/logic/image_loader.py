@@ -156,7 +156,7 @@ class SatelliteLoader:
         
         if nodata_value is not None:
             # Un pixel es valido si al menos una banda es distinta de nodata
-            valid_mask = np.any(x != nodata_value, axis=-1)
+            valid_mask = np.all(x != nodata_value, axis=-1)
             out[~valid_mask] = 0
         
         return out

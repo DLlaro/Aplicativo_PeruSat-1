@@ -23,8 +23,7 @@ class ROIManager:
         self.on_data_changed_callback = onDataChanged # Guardamos el callback
         self.isActivated = False
         self.area_km2 = 0.0
-        self.bounding_box: tuple = None
-        self.polygon = None
+        self.coords = None
 
         self._preparar_capas()
 
@@ -89,35 +88,18 @@ class ROIManager:
 
     def _on_data_changed(self, event):
 
-        if self.layer is None:
+        if self.layer is None or self._updating:
             return
-
-        if len(self.layer.data) == 0:
-            self.bounding_box = None
-            if self.on_data_changed_callback:
-                self.on_data_changed_callback(False)
-            return
-        # Solo tomar el último polígono
-        self.polygon = self.layer.data[-1]
-        print(self.polygon)
-
-        rows = self.polygon[:, 0]
-        cols = self.polygon[:, 1]
-
-        min_x = cols.min()
-        max_x = cols.max()
-        min_y = rows.min()
-        max_y = rows.max()
-
-        self.bounding_box = (
-            int(min_x),
-            int(min_y),
-            int(max_x - min_x),
-            int(max_y - min_y),
-        )
+        
+        if len(self.layer.data) > 1:
+            self._updating = True
+            try:
+                self.layer.data = self.layer.data[-1:]
+            finally:
+                self._updating = False
 
         if self.on_data_changed_callback:
-            self.on_data_changed_callback(True)
+            self.on_data_changed_callback(len(self.layer.data) > 0)
 
     def limpiar(self) -> None:
         """

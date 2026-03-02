@@ -46,7 +46,8 @@ def _pixel_to_latlon(pixel_x: float, pixel_y: float, transform, crs) -> tuple[fl
 
 def rectangle_to_coords(layer, scale_factor) -> tuple[float, float, float, float]:
         """
-        Extrae las coordenadas y dimensiones reales del ROI
+        Extrae las coordenadas y dimensiones reales del ROI si es un rectangulo o
+        el bounding box si es un poligono
         
         Args:
             layer: Capa dibujada por el usuario en el visor
