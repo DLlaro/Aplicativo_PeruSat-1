@@ -1,72 +1,94 @@
-import numpy as np
+import colorsys
+import hashlib
+
 import geopandas as gpd
+import numpy as np
 from affine import Affine
+
 from logic.image_loader import SatelliteLoader
 
-def load_vector_to_napari(gpkg_path: str = None, 
-                          loader: SatelliteLoader = None) -> dict:
+
+def _iter_polygons(geom):
+    if geom is None or geom.is_empty:
+        return
+    gtype = geom.geom_type
+    if gtype == "Polygon":
+        yield geom
+    elif gtype == "MultiPolygon":
+        for poly in geom.geoms:
+            yield poly
+    elif gtype == "GeometryCollection":
+        for sub in geom.geoms:
+            yield from _iter_polygons(sub)
+
+
+def _color_for_label(label: str, neutral_value: str = "0", alpha: float = 0.35):
+    if label == neutral_value:
+        return [0.70, 0.70, 0.70, alpha], [0.45, 0.45, 0.45, 1.0]
+
+    digest = hashlib.md5(label.encode("utf-8")).hexdigest()
+    hue = int(digest[:4], 16) / 65535.0
+    r, g, b = colorsys.hsv_to_rgb(hue, 0.75, 0.95)
+    return [r, g, b, alpha], [r * 0.75, g * 0.75, b * 0.75, 1.0]
+
+
+def load_vector_to_napari(
+    gpkg_path: str = None,
+    loader: SatelliteLoader = None,
+    color_field: str = None,
+    neutral_value: str = "0",
+    layer: str = None,
+) -> dict:
     """
-    Transforma una capa vectorial a coordenadas de pixel relativas al preview del visor.
-
-    Lee un archivo GeoPackage, reproyecta las geometrías al sistema de coordenadas
-    de píxel de la imagen de previsualización aplicando la escala del loader,
-    y retorna las formas listas para renderizar en Napari.
-
-    Args
-    ----------
-    gpkg_path : str
-        Ruta al archivo GeoPackage (.gpkg) con las geometrías a transformar.
-    loader : SatelliteLoader
-        Instancia del loader con la imagen actualmente cargada. Se accede a:
-        - loader.transform: 
-            matriz affine original del raster.
-        - loader.scale_factor: 
-            factor de escala aplicado al preview (ej: 0.2 para escala 5).
-
-    Return
-    -------
-    :dict
-        - 'type': 'shapes'
-        - 'data': list[np.ndarray] — coordenadas en píxeles (row, col) de cada polígono, listas para Napari.
-        - 'shape_type': 'polygon'
-
-    Notas
-    -----
-    - La matriz affine se re-escala según `1 / loader.scale_factor` para que
-      las coordenadas geográficas mapeen correctamente al espacio de la preview
-      y no al raster original.
-    - Las geometrías vacías (`geom.is_empty`) son ignoradas.
-    - Las coordenadas se convierten de (x, y) geográfico a (row, col) de píxel
-      invirtiendo los ejes para cumplir con la convención de Napari.
+    Transforma una capa vectorial a coordenadas de pixel de la preview para Napari.
+    Soporta coloreado por atributo (ej. UBIGEO_CCPP_CONFIRMADO).
     """
-    gdf = gpd.read_file(gpkg_path)
-    
-    # 1. Obtener la matriz original
-    aff_original = loader.transform 
-    
-    # 2. AJUSTE CRÍTICO: Modificar la matriz según la escala del preview
-    # Re-escalamos la matriz para que coincida con la imagen pequeña
-    factor = 1.0 / loader.scale_factor # Esto nos da el "salto" de píxeles (ej: 5)
-    
-    # La nueva matriz tiene píxeles más grandes (multiplicamos ancho y alto de píxel)
+    gdf = gpd.read_file(gpkg_path, layer=layer)
+    if gdf.empty:
+        return {
+            "type": "shapes",
+            "data": [],
+            "shape_type": "polygon",
+        }
+
+    if loader is None:
+        raise ValueError("loader es requerido para transformar la capa al visor.")
+    if loader.transform is None or loader.scale_factor is None:
+        raise ValueError("loader no tiene transform/scale_factor configurados.")
+
+    if loader.crs is not None and gdf.crs is not None and str(gdf.crs) != str(loader.crs):
+        gdf = gdf.to_crs(loader.crs)
+
+    aff_original = loader.transform
+    factor = 1.0 / loader.scale_factor
     aff_scaled = aff_original * Affine.scale(factor, factor)
-    
-    # 3. Inversa de la matriz re-escalada
     inv_transform = ~aff_scaled
-    
+
+    if color_field and color_field in gdf.columns:
+        labels = gdf[color_field].fillna(neutral_value).astype(str).tolist()
+    else:
+        labels = ["default"] * len(gdf)
+
     shapes_in_pixels = []
-    for geom in gdf.geometry:
-        if geom.is_empty: continue
-        
-        coords = np.array(geom.exterior.coords)
-        # Ahora inv_transform nos dará coordenadas relativas a la PREVIEW
-        pixel_coords = [inv_transform * (x, y) for x, y in coords]
-        
-        napari_coords = np.array([[p[1], p[0]] for p in pixel_coords])
-        shapes_in_pixels.append(napari_coords)
-        
-    return {
-        'type': 'shapes',
-        'data': shapes_in_pixels,
-        'shape_type': 'polygon'
+    face_colors = []
+    edge_colors = []
+
+    for label, geom in zip(labels, gdf.geometry):
+        fc, ec = _color_for_label(label, neutral_value=neutral_value)
+        for poly in _iter_polygons(geom):
+            coords = np.array(poly.exterior.coords)
+            pixel_coords = [inv_transform * (x, y) for x, y in coords]
+            napari_coords = np.array([[p[1], p[0]] for p in pixel_coords], dtype=float)
+            shapes_in_pixels.append(napari_coords)
+            face_colors.append(fc)
+            edge_colors.append(ec)
+
+    payload = {
+        "type": "shapes",
+        "data": shapes_in_pixels,
+        "shape_type": "polygon",
     }
+    if len(face_colors) == len(shapes_in_pixels) and face_colors:
+        payload["face_color"] = face_colors
+        payload["edge_color"] = edge_colors
+    return payload

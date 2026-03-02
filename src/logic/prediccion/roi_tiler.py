@@ -66,18 +66,20 @@ def roi_to_tiles(
     polygon = np.round(polygon_raster).astype(int)
 
     with rasterio.open(loader.path) as src:
-        min_row = int(polygon[:,0].min())
-        max_row = int(polygon[:,0].max())
-        min_col = int(polygon[:,1].min())
-        max_col = int(polygon[:,1].max())
+        min_row = max(0, int(np.floor(polygon[:, 0].min())))
+        max_row = min(src.height, int(np.ceil(polygon[:, 0].max())) + 1)
+        min_col = max(0, int(np.floor(polygon[:, 1].min())))
+        max_col = min(src.width, int(np.ceil(polygon[:, 1].max())) + 1)
 
         x = min_col
         y = min_row
         W = max_col - min_col
         H = max_row - min_row
+        if W <= 0 or H <= 0:
+            raise ValueError("El poligono seleccionado no intersecta la imagen.")
 
         nodata_value = 0
-        stride = int(tile_size * (1 - overlap))
+        stride = max(1, int(tile_size * (1 - overlap)))
 
         y_end = y + H
         x_end = x + W
@@ -97,8 +99,19 @@ def roi_to_tiles(
         features = []
         i = 0 
 
-        ys = range(y, y_end, stride)
-        xs = range(x, x_end, stride)
+        ys = list(range(y, y_end, stride))
+        xs = list(range(x, x_end, stride))
+        if not ys:
+            ys = [y]
+        if not xs:
+            xs = [x]
+
+        last_y = max(y, y_end - tile_size)
+        last_x = max(x, x_end - tile_size)
+        if ys[-1] != last_y:
+            ys.append(last_y)
+        if xs[-1] != last_x:
+            xs.append(last_x)
 
         total_tiles = len(ys) * len(xs)
         height = H

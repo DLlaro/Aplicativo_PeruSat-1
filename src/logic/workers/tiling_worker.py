@@ -88,7 +88,14 @@ class TilingWorker(BaseWorker):
                 )
                 shape = load_vector_to_napari(buildings_path, self.loader)
 
-            self.finished.emit(shape)
+            result = {
+                "shape": shape,
+                "buildings_gpkg": buildings_path,
+                "gpkg_paths": gpkg_paths,
+                "base_output": base_output,
+            }
+
+            self.finished.emit(result)
         except Exception as e:
             print(e)
             self.error.emit(str(e))
