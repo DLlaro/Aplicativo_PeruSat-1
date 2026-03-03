@@ -7,11 +7,18 @@ from logic.workers.base_worker import BaseWorker
 class CCPPLinkWorker(BaseWorker):
     finished = Signal(object)
 
-    def __init__(self, buildings_path: str, ccpp_points_path: str, output_dir: str):
+    def __init__(
+        self,
+        buildings_path: str,
+        ccpp_points_path: str,
+        output_dir: str,
+        prediction_raster_path: str | None = None,
+    ):
         super().__init__()
         self.buildings_path = buildings_path
         self.ccpp_points_path = ccpp_points_path
         self.output_dir = output_dir
+        self.prediction_raster_path = prediction_raster_path
 
     def run(self):
         try:
@@ -19,6 +26,7 @@ class CCPPLinkWorker(BaseWorker):
                 buildings_path=self.buildings_path,
                 ccpp_points_path=self.ccpp_points_path,
                 output_dir=self.output_dir,
+                prediction_raster_path=self.prediction_raster_path,
                 progress_callback=lambda value, msg: self.progress(value, msg),
             )
             self.finished.emit(result)

@@ -342,6 +342,7 @@ class MainWindow(QMainWindow):
             buildings_path=self.last_buildings_gpkg_path,
             ccpp_points_path=ccpp_path,
             output_dir=output_dir,
+            prediction_raster_path=self.loader.path,
         )
         self.workerLink.progress_update.connect(self.status_mgr.update_progress)
         self.workerLink.error.connect(self._on_worker_error)
@@ -388,6 +389,7 @@ class MainWindow(QMainWindow):
         try:
             output_gpkg = result_payload["output_gpkg"]
             dissolved_layer = result_payload["dissolved_layer"]
+            voronoi_layer = result_payload.get("voronoi_layer")
             distance_crs = result_payload["distance_crs"]
 
             dissolved_shape = load_vector_to_napari(
@@ -406,6 +408,7 @@ class MainWindow(QMainWindow):
                 (
                     "Se genero la vinculacion con centros poblados.\n"
                     f"Archivo exportado: {output_gpkg}\n"
+                    f"Capa Voronoi: {voronoi_layer}\n"
                     f"CRS de distancias: {distance_crs}"
                 ),
             )
