@@ -6,6 +6,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import rasterio
+from rasterio.windows import Window
 from pyproj import CRS
 from rasterio.features import rasterize, shapes, sieve
 from rasterio.transform import Affine
@@ -51,7 +52,7 @@ def _is_projected_meter(crs: CRS) -> bool:
 
 def _utm_from_centroid(gdf: gpd.GeoDataFrame) -> CRS:
     gdf_wgs = gdf.to_crs(epsg=4326)
-    centroid = gdf_wgs.unary_union.centroid
+    centroid = gdf_wgs.centroid
     lon, lat = float(centroid.x), float(centroid.y)
     zone = int((lon + 180.0) // 6.0) + 1
     zone = max(1, min(zone, 60))
@@ -102,12 +103,14 @@ def _sample_boundary_points(geom, step: float = 10.0) -> list[tuple[float, float
 
 def _aoi_from_valid_pixels(
     tif_path: str,
+    coords: tuple,
     valid_rule: str = "any_band_gt0",
     band_indexes: Optional[list[int]] = None,
     downsample: int = 4,
     simplify_tol: float = 10.0,
     min_area_px: int = 300,
 ) -> gpd.GeoDataFrame:
+    print(coords)
     downsample = max(1, int(downsample))
 
     with rasterio.open(tif_path) as src:
@@ -117,20 +120,25 @@ def _aoi_from_valid_pixels(
         if band_indexes is None:
             band_indexes = list(range(1, src.count + 1))
 
-        out_h = max(1, int(math.ceil(src.height / downsample)))
-        out_w = max(1, int(math.ceil(src.width / downsample)))
+        out_h = max(1, int(math.ceil(coords[2] / downsample)))
+        out_w = max(1, int(math.ceil(coords[3] / downsample)))
+
+        x, y, w, h = coords
+        window = Window(x, y, w, h)
 
         data = src.read(
             band_indexes,
+            window = window,
             out_shape=(len(band_indexes), out_h, out_w),
             resampling=rasterio.enums.Resampling.nearest,
         )
+        transform = src.window_transform(window)
 
-        scale_x = src.width / out_w
-        scale_y = src.height / out_h
-        transform = src.transform * Affine.scale(scale_x, scale_y)
+        scale_x = coords[2] / out_w
+        scale_y = coords[3] / out_h
+        transform = transform * Affine.scale(scale_x, scale_y)
         crs = src.crs
-        nodata = src.nodata
+        nodata = 0
 
     if valid_rule == "not_nodata" and nodata is not None:
         valid = np.any(data != nodata, axis=0)
@@ -430,6 +438,7 @@ def link_buildings_to_ccpp(
     output_dir: str,
     distance_threshold_m: float = 146.5,
     prediction_raster_path: Optional[str] = None,
+    coords: tuple = None,
     progress_callback: Optional[ProgressCallback] = None,
 ) -> dict:
     _emit(progress_callback, 0, "Leyendo capas...")
@@ -518,6 +527,7 @@ def link_buildings_to_ccpp(
         _emit(progress_callback, 82, "Construyendo AOI desde pixeles validos...")
         aoi_gdf = _aoi_from_valid_pixels(
             prediction_raster_path,
+            coords = coords,
             valid_rule="any_band_gt0",
             downsample=4,
             simplify_tol=10.0,

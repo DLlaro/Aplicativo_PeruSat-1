@@ -5,6 +5,9 @@ from constants import (ROI_EDGE_COLOR,
                        )
 from typing import Callable
 
+from logic.image_loader import SatelliteLoader
+from logic.utils import get_rectangle_area_km2
+
 class ROIManager:
     def __init__(self, viewer_model: ViewerModel, 
                  onToggleCallback: Callable[[bool], None] = None, 
@@ -23,7 +26,7 @@ class ROIManager:
         self.on_data_changed_callback = onDataChanged # Guardamos el callback
         self.isActivated = False
         self.area_km2 = 0.0
-        self.coords = None
+        self.coords_roi = None
 
         self._preparar_capas()
 
@@ -114,7 +117,7 @@ class ROIManager:
                 self._updating = False
         
         self.isActivated = False
-        self.coords = None
+        self.coords_roi = None
 
         if self.on_data_changed_callback:
             self.on_data_changed_callback(False)
@@ -133,13 +136,13 @@ class ROIManager:
         """
         return self.layer is not None and len(self.layer.data) > 0
     
-    def validar_roi(self, transform, min_area_km2=10, original_shape=None, tolerance=512) -> bool | str:
+    def validar_roi(self, min_area_km2=10, shape: tuple = None) -> bool | str:
         """
         Valida el ROI calculando la intersección real con la imagen.
 
         Calcula el área de solapamiento entre la caja dibujada y los límites 
         reales de la imagen. Si la selección es válida, actualiza
-        self.coords con las coordenadas recortadas listas para un crop seguro.
+        self.coords_roi con las coordenadas recortadas listas para un crop seguro.
 
         Args
         ----------
@@ -162,38 +165,56 @@ class ROIManager:
             - False, mensaje      → ROI inválido. El string describe el motivo
                                     del rechazo.
         """
-        if self.coords is None:
+        if self.coords_roi is None:
             return (False, "No se han definido coordenadas.")
 
-        real_x, real_y, real_w, real_h = self.coords
-        img_h, img_w = original_shape
+        # --- VALIDACIONES ---
+        # A. Verificar si hay solapamiento
+        if self.coords_roi[2] <= 0 or self.coords_roi[3] <= 0:
+            return False, "El área seleccionada está completamente fuera de la imagen."
 
-        # 1. Calcular coordenadas de la caja dibujada (esquinas opuestas)
-        draw_x1, draw_y1 = real_x, real_y
-        draw_x2, draw_y2 = real_x + real_w, real_y + real_h
+        # B. Verificar perdida por desborde por lado
+        exceeded = self._calcular_overflow(shape)
+        if exceeded:
+            lados = ", ".join(exceeded)
+            return False, f"La selección se sale demasiado por: {lados}."
 
-        # 2. Calcular la intersección (Solo lo que cae dentro de la imagen)
-        # Si la intersección es negativa, significa que está totalmente fuera.
-        inter_x1 = max(0, draw_x1)
-        inter_y1 = max(0, draw_y1)
-        inter_x2 = min(img_w, draw_x2)
-        inter_y2 = min(img_h, draw_y2)
+        if self.area_km2 < min_area_km2:
+            return False, f"Área útil insuficiente: {self.area_km2:.2f} km²"
 
-        # 3. Calcular dimensiones reales dentro de la imagen
+        return True, f"{self.area_km2:.2f}"
+    
+    def _actualizar_coords_validas(self, shape, transform):
+        true_w, true_h, inter_x1, inter_y1 = self._get_valid_shape_roi(shape)
+        if true_w <= 0 or true_h <= 0:
+            self.coords_roi = None
+        
+        self.coords_roi = (inter_x1, inter_y1, true_w, true_h)
+        self.area_km2 = get_rectangle_area_km2((self.coords_roi[3], self.coords_roi[2]), transform)
+    
+    def _get_valid_shape_roi(self, shape) -> float :
+        roi_x, roi_y, roi_w, roi_h = self.coords_roi
+        img_h, img_w = shape
+
+        inter_x1 = max(0, roi_x)
+        inter_y1 = max(0, roi_y)
+        inter_x2 = min(img_w, roi_x + roi_w)
+        inter_y2 = min(img_h, roi_y + roi_h)
+
+        # 3. Calcular dimensiones w,h del roi valido
         true_w = inter_x2 - inter_x1
         true_h = inter_y2 - inter_y1
 
-        # --- VALIDACIONES ---
+        return true_w, true_h, inter_x1, inter_y1
+    
+    def _calcular_overflow(self, shape, tolerance= 512) -> tuple [bool, str]:
+        roi_x, roi_y, roi_w, roi_h = self.coords_roi
+        img_h, img_w = shape
 
-        # A. Verificar si hay solapamiento
-        if true_w <= 0 or true_h <= 0:
-            return False, "El área seleccionada está completamente fuera de la imagen."
-
-        # B. Verificar pérdida por desborde por lado
-        overflow_left   = max(0, -draw_x1)          # píxeles fuera por la izquierda
-        overflow_top    = max(0, -draw_y1)           # píxeles fuera por arriba
-        overflow_right  = max(0, draw_x2 - img_w)   # píxeles fuera por la derecha
-        overflow_bottom = max(0, draw_y2 - img_h)   # píxeles fuera por abajo
+        overflow_left   = max(0, -roi_x)          # píxeles fuera por la izquierda
+        overflow_top    = max(0, -roi_y)           # píxeles fuera por arriba
+        overflow_right  = max(0, roi_x + roi_w - img_w)   # píxeles fuera por la derecha
+        overflow_bottom = max(0, roi_y + roi_h - img_h)   # píxeles fuera por abajo
 
         exceeded = []
         if overflow_left   > tolerance: exceeded.append(f"izquierda ({overflow_left}px)")
@@ -201,21 +222,5 @@ class ROIManager:
         if overflow_right  > tolerance: exceeded.append(f"derecha ({overflow_right}px)")
         if overflow_bottom > tolerance: exceeded.append(f"abajo ({overflow_bottom}px)")
 
-        if exceeded:
-            lados = ", ".join(exceeded)
-            return False, f"La selección se sale demasiado por: {lados}."
-
-        # C. Validar área mínima con los píxeles REALES (intersección)
-        res_x = abs(transform.a)
-        res_y = abs(transform.e)
-
-        area_m2 = true_w * true_h * (res_x * res_y)
-        self.area_km2 = area_m2 / 1_000_000 
-
-        if self.area_km2 < min_area_km2:
-            return False, f"Área útil insuficiente: {self.area_km2:.2f} km²"
-
-        # Guardamos las coordenadas recortadas (clipping) para que el Crop sea seguro
-        self.coords = (inter_x1, inter_y1, true_w, true_h)
-
-        return True, f"{self.area_km2:.2f}"
+        return exceeded
+    

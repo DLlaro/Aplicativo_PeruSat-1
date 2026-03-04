@@ -52,7 +52,6 @@ class TilingWorker(BaseWorker):
 
                 print("\n[1/5] Generando tiles...")
                 roi_to_tiles(coords = self.coords,
-                            scale_factor = 1/self.loader.scale_factor,
                             tif_name = TIF_ID,
                             loader = self.loader,
                             out_dir = paths['tiles'], 

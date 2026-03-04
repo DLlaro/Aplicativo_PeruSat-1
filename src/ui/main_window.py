@@ -36,6 +36,7 @@ class MainWindow(QMainWindow):
 
         self.loader = SatelliteLoader()
         self.viewer_model = ViewerModel()
+        self.viewer_model.theme = 'light'
 
         self.container = QWidget()
         self.main_layout = QHBoxLayout(self.container)
@@ -147,8 +148,8 @@ class MainWindow(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             escala = dialog.get_values()
             self.status_mgr.show_message(
-                f"Procesando imagen de {shape[1]}x{shape[0]}px -> "
-                f"{shape[1]*(escala/100):.0f}x{shape[0]*(escala/100):.0f}px ..."
+                f"Procesando imagen de {shape[1]} x {shape[0]} px=> "
+                f"{shape[1]*(escala/100):.0f} x {shape[0]*(escala/100):.0f} px..."
             )
             self.cargar_en_visor(escala)
         else:
@@ -206,19 +207,6 @@ class MainWindow(QMainWindow):
             return
         self.roi_manager.activar_herramienta(activar, mode)
 
-    def _get_full_image_polygon(self) -> np.ndarray:
-        if self.loader.scaled_shape is None:
-            raise ValueError("No hay preview cargada para construir la extension completa.")
-        h, w = self.loader.scaled_shape
-        return np.array([[0, 0], [0, w - 1], [h - 1, w - 1], [h - 1, 0]], dtype=float)
-
-    def _get_full_image_area_km2(self) -> float:
-        h, w = self.loader.get_original_shape()
-        res_x = abs(self.loader.transform.a)
-        res_y = abs(self.loader.transform.e)
-        area_m2 = h * w * (res_x * res_y)
-        return area_m2 / 1_000_000
-
     def analizar_imagen(self) -> None:
         try:
             if not self.modelo_cargado:
@@ -226,13 +214,13 @@ class MainWindow(QMainWindow):
                 return
 
             has_roi = self.roi_manager.tiene_datos()
-            dialog_area = self.roi_manager.area_km2 if has_roi else self._get_full_image_area_km2()
-
+            area = self.roi_manager.area_km2 if has_roi else self.loader.get_image_area_km2()
             analyze_dlg = AnalyzeDialog(
                 self,
-                dialog_area,
+                area,
                 lambda: self.select_directory(ruta_inicial=self.loader.path),
                 has_roi=has_roi,
+                loader = self.loader
             )
             ok = analyze_dlg.exec()
             if not ok:
@@ -245,7 +233,7 @@ class MainWindow(QMainWindow):
 
             process_full = analyze_dlg.process_full_image
             if process_full:
-                polygon = self._get_full_image_polygon()
+                self.roi_manager.coords_roi = self.loader.get_image_coords()
             else:
                 if not has_roi:
                     QMessageBox.warning(
@@ -255,20 +243,19 @@ class MainWindow(QMainWindow):
                     )
                     return
                 es_valido, mensaje = self.roi_manager.validar_roi(
-                    self.loader.transform,
                     min_area_km2=MIN_AREA_KM2,
-                    original_shape=self.loader.get_original_shape(),
+                    shape=self.loader.get_original_shape(),
                 )
                 if not es_valido and not self._handle_roi_invalido(mensaje):
                     return
-                polygon = self.roi_manager.polygon
+                #polygon = self.roi_manager.polygon
 
             self.status_mgr.show_progress()
             self.toolbar.set_all_enabled(False)
             self.toggle_modo_roi(False)
 
             self.workerTiler = TilingWorker(loader = self.loader,
-                                                coords=self.roi_manager.coords,
+                                                coords=self.roi_manager.coords_roi,
                                                 modelo = self.model, 
                                                 output_dir=analyze_dlg.selected_path)
             self.workerTiler.progress_update.connect(self.status_mgr.update_progress)
@@ -337,12 +324,13 @@ class MainWindow(QMainWindow):
 
         self.status_mgr.show_progress()
         self.toolbar.set_all_enabled(False)
-
+        print(self.roi_manager.coords_roi)
         self.workerLink = CCPPLinkWorker(
             buildings_path=self.last_buildings_gpkg_path,
             ccpp_points_path=ccpp_path,
             output_dir=output_dir,
-            prediction_raster_path=self.loader.path,
+            coords = self.roi_manager.coords_roi,
+            prediction_raster_path=self.loader.path
         )
         self.workerLink.progress_update.connect(self.status_mgr.update_progress)
         self.workerLink.error.connect(self._on_worker_error)

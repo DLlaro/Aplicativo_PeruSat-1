@@ -1,6 +1,8 @@
 from PySide6.QtCore import QSize
-from PySide6.QtGui import QAction
-from PySide6.QtWidgets import QMenu, QStyle, QToolBar
+from PySide6.QtGui import QAction, QIcon
+from PySide6.QtWidgets import QMenu, QStyle, QToolBar, QToolButton
+
+from logic.utils.config_manager import settings
 
 
 class AppToolbar(QToolBar):
@@ -20,21 +22,28 @@ class AppToolbar(QToolBar):
             self,
         )
 
-        self.action_roi = QAction(
-            self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView),
-            "Dibujar ROI (R)",
-            self,
+        self.action_roi_rect = QAction(
+            QIcon(f"{settings.base_path}/assets/icons/rectangle.svg"),
+            "Rectangulo", 
+            self
+        )
+        
+        self.action_roi_poly = QAction(
+            QIcon(f"{settings.base_path}/assets/icons/polygon.svg"),
+            "Polígono", 
+            self
         )
 
         self.menu_roi = QMenu(self)
-        self.action_roi_rect = QAction("Rectangulo", self)
-        self.action_roi_poly = QAction("Poligono", self)
         self.menu_roi.addAction(self.action_roi_rect)
         self.menu_roi.addAction(self.action_roi_poly)
 
-        self.action_roi.setMenu(self.menu_roi)
-        self.action_roi.setCheckable(True)
-        self.action_roi.setShortcut("R")
+        self.roi_btn = QToolButton()
+        self.roi_btn.setText("ROI")
+        self.roi_btn.setMenu(self.menu_roi)
+        self.roi_btn.setPopupMode(QToolButton.InstantPopup)
+
+        self.roi_btn.setCheckable(True)
 
         self.action_analyze = QAction(
             self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowRight),
@@ -67,12 +76,7 @@ class AppToolbar(QToolBar):
     def _setup(self):
         self.addAction(self.action_open)
         self.addSeparator()
-
-        self.addAction(self.action_roi)
-        button_roi = self.widgetForAction(self.action_roi)
-        if button_roi:
-            button_roi.setPopupMode(button_roi.ToolButtonPopupMode.InstantPopup)
-
+        self.addWidget(self.roi_btn)
         self.addSeparator()
         self.addAction(self.action_analyze)
         self.addSeparator()
@@ -83,11 +87,11 @@ class AppToolbar(QToolBar):
         self.addAction(self.action_config)
 
     def set_roi_checked(self, activo: bool):
-        self.action_roi.setChecked(activo)
-        self.action_roi.setText("ROI: Activo (Esc)" if activo else "Seleccionar ROI")
+        self.roi_btn.setChecked(activo)
+        self.roi_btn.setText("ROI: Activo (Esc)" if activo else "Seleccionar ROI")
 
     def set_roi_enabled(self, activo: bool):
-        self.action_roi.setEnabled(activo)
+        self.roi_btn.setEnabled(activo)
 
     def set_analyze_enabled(self, enabled: bool):
         self.action_analyze.setEnabled(enabled)
@@ -111,7 +115,7 @@ class AppToolbar(QToolBar):
         Respeta el estado interno del boton de vinculacion.
         """
         self.action_open.setEnabled(enabled)
-        self.action_roi.setEnabled(enabled)
+        self.roi_btn.setEnabled(enabled)
         self.action_analyze.setEnabled(enabled)
         self.action_reset.setEnabled(enabled)
         self.action_config.setEnabled(enabled)

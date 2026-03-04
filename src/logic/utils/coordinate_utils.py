@@ -78,3 +78,12 @@ def rectangle_to_coords(layer, scale_factor) -> tuple[float, float, float, float
         real_h = int((y_max - y_min) / scale_factor)
         
         return (real_x, real_y, real_w, real_h)
+
+def get_rectangle_area_km2(original_shape, transform) -> float:
+        dy = original_shape[0] 
+        dx = original_shape[1]
+
+        dy_real = dy * abs(transform.e)
+        dx_real = dx * abs(transform.a)
+
+        return (dy_real * dx_real)/ 1_000_000

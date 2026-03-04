@@ -17,7 +17,6 @@ ProgressCallback: TypeAlias = Callable[[int, str, str, bool], None]
 
 def roi_to_tiles(
     coords: tuple,
-    scale_factor: float,
     tif_name: str,
     loader: SatelliteLoader,
     out_dir: str,
@@ -57,7 +56,7 @@ def roi_to_tiles(
     os.makedirs(out_dir, exist_ok=True)
 
     with rasterio.open(loader.path) as src:
-        x, y, W, H = 0,0, loader.original_shape[1], loader.original_shape[0]
+        x, y, W, H = coords
         bands = src.count
         transform = src.transform
         nodata_value = 0

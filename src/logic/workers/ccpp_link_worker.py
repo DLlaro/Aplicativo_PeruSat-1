@@ -12,6 +12,7 @@ class CCPPLinkWorker(BaseWorker):
         buildings_path: str,
         ccpp_points_path: str,
         output_dir: str,
+        coords: tuple,
         prediction_raster_path: str | None = None,
     ):
         super().__init__()
@@ -19,6 +20,8 @@ class CCPPLinkWorker(BaseWorker):
         self.ccpp_points_path = ccpp_points_path
         self.output_dir = output_dir
         self.prediction_raster_path = prediction_raster_path
+        self.coords = coords
+
 
     def run(self):
         try:
@@ -27,6 +30,7 @@ class CCPPLinkWorker(BaseWorker):
                 ccpp_points_path=self.ccpp_points_path,
                 output_dir=self.output_dir,
                 prediction_raster_path=self.prediction_raster_path,
+                coords= self.coords,
                 progress_callback=lambda value, msg: self.progress(value, msg),
             )
             self.finished.emit(result)

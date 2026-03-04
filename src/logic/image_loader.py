@@ -7,9 +7,7 @@ from numpy import float32, uint8
 from rasterio.windows import Window
 
 from logic.utils.config_manager import settings
-
-from constants import MAX_LIMIT_RENDER, MAX_LIMIT_RENDER_UNLOCK
-
+from logic.utils import get_rectangle_area_km2, rectangle_to_coords
 from typing import TypeAlias, Callable,  Optional, Tuple
 
 ProgressCallback: TypeAlias = Callable[[int, str, str, bool], None]
@@ -63,7 +61,7 @@ class SatelliteLoader:
         
     def get_original_shape(self) -> Tuple[int, int]:
         """
-        Devuelve el shape original del raster.
+        Devuelve el shape original del raster. H x W
 
         Raises
         ------
@@ -74,6 +72,23 @@ class SatelliteLoader:
             raise ValueError("No se ha cargado metadata todavía.")
 
         return self.original_shape
+    
+    def get_res_px_per_side(self) -> tuple:
+        if self.original_shape is None:
+            raise ValueError("No se ha cargado metadata todavía.")
+        res_x = abs(self.transform.a)
+        res_y = abs(self.transform.e)
+
+        return res_x, res_y
+    
+    def get_image_area_km2(self) -> float:
+        return get_rectangle_area_km2(self.original_shape, self.transform)
+    
+    def get_image_coords(self) -> float:
+        if self.scaled_shape is None:
+            raise ValueError("No hay preview cargada para construir la extension completa.")
+        h, w = self.scaled_shape
+        return np.array([[0, 0], [0, w - 1], [h - 1, w - 1], [h - 1, 0]], dtype=float)
 
     def get_preview(self,
                     escala_input: int = 50,
@@ -139,6 +154,8 @@ class SatelliteLoader:
         nodata_value: int
             valor de NoData en el raster
         """
+        if x.dtype == np.uint8 and x.max() <= 255:
+            return x
         x_norm = np.zeros_like(x, dtype = np.float32)
         for b in range(x.shape[-1]):
             band = x[..., b]
@@ -149,7 +166,7 @@ class SatelliteLoader:
                 x_norm[..., b]= np.clip((band - self.global_lo[b]) / (self.global_hi[b] - self.global_lo[b] + 1e-6), 0, 1)
             
             if progress_callback:
-                progress = int((b/x.shape[-1])*100)
+                progress = int(((b+1)/x.shape[-1])*100)
                 progress_callback(progress, msg = f"Normalizando banda{b}")
 
         out = (x_norm * 254 + 1).astype(np.uint8)## convertir valores cercanos a 0 a 1 para que no sean tratados como nodata
