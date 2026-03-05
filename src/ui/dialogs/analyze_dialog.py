@@ -6,8 +6,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QStyle,
-    QVBoxLayout,
-    QWidget
+    QVBoxLayout
 )
 
 from logic.image_loader import SatelliteLoader
@@ -16,7 +15,7 @@ AREA_LIMITE = 20
 
 
 class AnalyzeDialog(QDialog):
-    def __init__(self, parent, area_roi_km2: float, callback=None, has_roi: bool = True, loader: SatelliteLoader = None):
+    def __init__(self, parent, loader: SatelliteLoader, area_roi_km2: float, callback=None, has_roi: bool = True):
         super().__init__(parent)
 
         self.setWindowTitle("Configuracion de Analisis")
@@ -85,8 +84,13 @@ class AnalyzeDialog(QDialog):
     def extension_aviso(self):
         while self.warning_layout.count():
             item = self.warning_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            try:
+                widget = item.widget() if item is not None else None
+                if widget:
+                    widget.deleteLater()
+            except Exception as e:
+                print(f"Error al eliminar widget de advertencia: {e}")
+
 
         # 2. Add new warning if necessary
         if self.area > AREA_LIMITE:

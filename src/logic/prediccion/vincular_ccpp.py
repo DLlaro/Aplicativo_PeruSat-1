@@ -7,9 +7,12 @@ import numpy as np
 import pandas as pd
 import rasterio
 from rasterio.windows import Window
-from pyproj import CRS
 from rasterio.features import rasterize, shapes, sieve
 from rasterio.transform import Affine
+import rasterio.enums
+
+from pyproj import CRS
+
 from shapely.geometry import MultiPolygon, Polygon, shape
 from shapely.ops import unary_union
 from shapely.strtree import STRtree
@@ -53,7 +56,7 @@ def _is_projected_meter(crs: CRS) -> bool:
 def _utm_from_centroid(gdf: gpd.GeoDataFrame) -> CRS:
     gdf_wgs = gdf.to_crs(epsg=4326)
     centroid = gdf_wgs.centroid
-    lon, lat = float(centroid.x), float(centroid.y)
+    lon, lat = float(centroid.x.iloc[0]), float(centroid.y.iloc[0])
     zone = int((lon + 180.0) // 6.0) + 1
     zone = max(1, min(zone, 60))
     epsg = 32600 + zone if lat >= 0 else 32700 + zone

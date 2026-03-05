@@ -11,9 +11,7 @@ from logic.image_loader import SatelliteLoader
 import geopandas as gpd
 
 from skimage.draw import polygon as skpolygon
-from typing import TypeAlias, Callable
-
-ProgressCallback: TypeAlias = Callable[[int, str, str, bool], None]
+from typing import Optional, TypeAlias, Callable
 
 def roi_to_tiles(
     coords: tuple,
@@ -24,7 +22,7 @@ def roi_to_tiles(
     overlap: float = 0.5,
     nodata_threshold: float = 0.9,
     black_tile_threshold: float = 5.0,
-    progress_callback: ProgressCallback = None 
+    progress_callback = None 
 ):
     """
     Extrae el área del roi demarcado para normalizar y 
@@ -92,7 +90,6 @@ def roi_to_tiles(
 
                     # Definimos la ventana teórica (puede estar fuera de los límites del TIF)
                     window = Window(xi, yi, tile_size, tile_size)
-
                     # LEER CON BOUNDLESS: 
                     # Si xi o yi están fuera, o si la ventana excede el ancho/alto, 
                     # rasterio rellena automáticamente con fill_value (ceros).

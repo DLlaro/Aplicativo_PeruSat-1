@@ -148,7 +148,7 @@ class MainWindow(QMainWindow):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             escala = dialog.get_values()
             self.status_mgr.show_message(
-                f"Procesando imagen de {shape[1]} x {shape[0]} px=> "
+                f"Procesando imagen: {shape[1]} x {shape[0]} px a "
                 f"{shape[1]*(escala/100):.0f} x {shape[0]*(escala/100):.0f} px..."
             )
             self.cargar_en_visor(escala)
@@ -216,11 +216,11 @@ class MainWindow(QMainWindow):
             has_roi = self.roi_manager.tiene_datos()
             area = self.roi_manager.area_km2 if has_roi else self.loader.get_image_area_km2()
             analyze_dlg = AnalyzeDialog(
-                self,
+                self, 
+                self.loader,
                 area,
                 lambda: self.select_directory(ruta_inicial=self.loader.path),
                 has_roi=has_roi,
-                loader = self.loader
             )
             ok = analyze_dlg.exec()
             if not ok:
