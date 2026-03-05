@@ -86,7 +86,7 @@ class SideBarManager:
         self.scroll.setWidget(nuevo_content_widget)
         self.content_widget = nuevo_content_widget
         
-        print("Sidebar limpiado con éxito (Atomic Swap).")
+        print("Sidebar limpiado con éxito")
         
     def show_sidebar(self):
         self.sidebar.show()

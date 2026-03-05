@@ -1,7 +1,7 @@
 # mouse_handler.py
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from logic.utils import cursor_to_coords, rectangle_to_coords
+from logic.utils import cursor_to_coords
 from constants import PIXEL_SIZE_PERU_SAT
 
 if TYPE_CHECKING:
@@ -97,16 +97,13 @@ class MouseHandler:
             area_m2 = dx * dy  # use real pixel size
             area_km2 = area_m2 / 1_000_000
             
-            #Update a label in your widget instead of statusBar()
-            self.mw.status_mgr.update_roi_area(dx, dy, area_km2)
+            if self.mw.roi_manager.layer.mode == "add_rectangle":
+                self.mw.status_mgr.update_rectangle_roi_area(dx, dy, area_km2)
             yield
 
         # ← everything below runs on RELEASE
         ## Toma las coordenadas reales crudas del dibujo
-        self.mw.roi_manager.coords_roi = rectangle_to_coords(self.mw.roi_manager.layer, scale_factor= self.mw.loader.scale_factor)
-        ## Actualiza las coordenadas validas reales (interseccion entre imagen y roi)
-        self.mw.roi_manager._actualizar_coords_validas(self.mw.loader.original_shape, self.mw.loader.transform)
-        print(self.mw.roi_manager.area_km2)
+        self.mw.roi_manager.roi_to_coords(self.mw.loader)  # esto actualiza self.mw.roi_manager.coords_roi con las coordenadas reales del ROI
 
         release_pos = event.position
         #self.roi_manager.on_drag_end(release_pos)    # adapt to your API

@@ -2,5 +2,6 @@
     <qresource prefix="/icons">
         <file>icons/rectangle.svg</file>
         <file>icons/polygon.svg</file>
+        <file>icons/draw_roi.svg</file>
     </qresource>
 </RCC>

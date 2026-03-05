@@ -9,7 +9,7 @@ from numpy import float32, uint8
 import os
 
 from logic.utils.config_manager import settings
-from logic.utils import get_rectangle_area_km2, rectangle_to_coords
+from logic.utils import get_rectangle_area_km2
 from typing import  Optional, Tuple
 
 class SatelliteLoader:
@@ -193,8 +193,6 @@ class SatelliteLoader:
         
         x_norm = np.zeros_like(x, dtype = np.float32)
         for b in range(x.shape[-1]):
-            print("x.shape[-1]: ", x.shape[-1])
-
             band = x[..., b]
             if nodata_value is not None:
                 valid = band != nodata_value
@@ -202,12 +200,12 @@ class SatelliteLoader:
             else:
                 x_norm[..., b] = np.clip((band - self.global_lo[b]) / (self.global_hi[b] - self.global_lo[b] + 1e-6), 0, 1)
             
-            if progress_callback:
+            if progress_callback is not None:
                 progress = int(((b+1)/x.shape[-1])*100)
                 progress_callback(progress, msg = f"Normalizando banda{b}")
 
         out = (x_norm * 254 + 1).astype(np.uint8)## convertir valores cercanos a 0 a 1 para que no sean tratados como nodata
-        
+
         if nodata_value is not None:
             # Un pixel es valido si al menos una banda es distinta de nodata
             valid_mask = np.all(x != nodata_value, axis=-1)

@@ -38,7 +38,7 @@ class StatusBarManager:
         self.lbl_escala.setText(f"Escala: 1 : {escala}")
 
 
-    def update_roi_area(self, dx, dy, area_km2):
+    def update_rectangle_roi_area(self, dx, dy, area_km2):
         self.lbl_coords.setText(f"ROI - Ancho: {dx:.1f} x Alto: {dy:.1f} m | Área: {area_km2:.4f} km²")
 
     def show_message(self, msg, timeout=0):

@@ -10,7 +10,7 @@ from rasterio.transform import xy
 from logic.image_loader import SatelliteLoader
 import geopandas as gpd
 
-from skimage.draw import polygon as skpolygon
+from skimage.draw import polygon
 from typing import Optional, TypeAlias, Callable
 
 def roi_to_tiles(
@@ -18,9 +18,10 @@ def roi_to_tiles(
     tif_name: str,
     loader: SatelliteLoader,
     out_dir: str,
+    polygon_coords = None,
     tile_size: int = 512,
     overlap: float = 0.5,
-    nodata_threshold: float = 0.9,
+    nodata_threshold: float = 0.95,
     black_tile_threshold: float = 5.0,
     progress_callback = None 
 ):
@@ -52,7 +53,7 @@ def roi_to_tiles(
         Funcion para la actualizacion de la barra de progreso
     """
     os.makedirs(out_dir, exist_ok=True)
-
+    print(polygon_coords)
     with rasterio.open(loader.path) as src:
         x, y, W, H = coords
         bands = src.count
@@ -95,6 +96,21 @@ def roi_to_tiles(
                     # rasterio rellena automáticamente con fill_value (ceros).
                     tile = src.read(window=window, boundless=True, fill_value=0)
 
+                    #ajustar coordenadas del polígono al sistema de referencia de la ventana
+                    if polygon_coords is not None:
+                        mask_ventana = np.zeros((tile_size, tile_size), dtype=bool)
+                        coords_locales = polygon_coords - [yi, xi]
+                        # Dibujar el polígono en la máscara de la ventana
+                        # polygon() se encarga de calcular qué píxeles caen dentro
+                        rr, cc = polygon(coords_locales[:, 0], coords_locales[:, 1], (tile_size, tile_size))
+                        valid = (rr >= 0) & (rr < tile_size) & (cc >= 0) & (cc < tile_size)
+                        mask_ventana[rr[valid], cc[valid]] = True
+                        if not np.any(mask_ventana):
+                            pbar.update(1)
+                            continue
+
+                        tile[:,~mask_ventana] = 0
+
                     # Calcular fracción de nodata
                     # Como el tile ya tiene el tamaño final, el cálculo es directo
                     if nodata_value is not None:
@@ -103,14 +119,15 @@ def roi_to_tiles(
                     else:
                         nodata_fraction = 0.0
 
-                    #if nodata_fraction > nodata_threshold:
-                    #    continue
+                    if nodata_fraction > nodata_threshold:
+                       pbar.update(1)
+                       continue
                     if bands >= 3:
                         tile_rgb = np.stack([tile[0], tile[1], tile[2]], axis=-1)
                     else:
                         raise ValueError("TIF must have at least 3 bands (RGB).")
 
-                    tile_rgb_8bit = loader._normalize_percentiles_per_band(tile_rgb, nodata_value, progress_callback= progress_callback)
+                    tile_rgb_8bit = loader._normalize_percentiles_per_band(tile_rgb, nodata_value)
 
                     # Detectar tiles negros
                     #mean_intensity = np.mean(tile_rgb_8bit)
@@ -165,10 +182,10 @@ def roi_to_tiles(
                     i += 1
                     pbar.update(1)
 
-                # Reportar progreso del tiling
-                if progress_callback:
-                    progress = int((i / total_tiles) * 100)
-                    progress_callback(progress, 100, f"Generando tiles:")
+                    # Reportar progreso del tiling
+                    if progress_callback:
+                        progress = int((pbar.n / total_tiles) * 100)
+                        progress_callback(progress, f"Generando tiles: {pbar.n}/{total_tiles}")
 
     # ===== PASO 3: Guardar metadatos =====
 

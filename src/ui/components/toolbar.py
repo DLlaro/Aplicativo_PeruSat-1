@@ -39,6 +39,7 @@ class AppToolbar(QToolBar):
         self.menu_roi.addAction(self.action_roi_poly)
 
         self.roi_btn = QToolButton()
+        self.roi_btn.setIcon(QIcon(f"{settings.base_path}/assets/icons/draw_roi.svg"))
         self.roi_btn.setText("ROI")
         self.roi_btn.setMenu(self.menu_roi)
         self.roi_btn.setPopupMode(QToolButton.InstantPopup)
@@ -86,9 +87,13 @@ class AppToolbar(QToolBar):
         self.addSeparator()
         self.addAction(self.action_config)
 
-    def set_roi_checked(self, activo: bool):
-        self.roi_btn.setChecked(activo)
-        self.roi_btn.setText("ROI: Activo (Esc)" if activo else "Seleccionar ROI")
+    def set_roi_opt_checked(self, activo: bool, option = "add_rectangle"):
+        if option == "add_rectangle":
+            self.action_roi_rect.setChecked(activo)
+            self.action_roi_poly.setChecked(False)
+        elif option == "add_polygon":
+            self.action_roi_poly.setChecked(activo)
+            self.action_roi_rect.setChecked(False)
 
     def set_roi_enabled(self, activo: bool):
         self.roi_btn.setEnabled(activo)

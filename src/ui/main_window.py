@@ -14,6 +14,7 @@ from constants import (
     MSG_ROI_READY,
     TIMEOUT_LONG,
     TIMEOUT_MEDIUM,
+    TIMEOUT_SHORT
 )
 from logic.image_loader import SatelliteLoader
 from logic.modelo.model_utils import cargar_recargar_modelo
@@ -77,16 +78,20 @@ class MainWindow(QMainWindow):
         self.modelo_cargado = exito
         self.status_mgr.show_message(msg, TIMEOUT_LONG if exito else TIMEOUT_MEDIUM)
 
-    def toggle_checked_roi(self, is_active: bool) -> None:
-        self.toolbar.set_roi_checked(is_active)
+    def toggle_checked_roi(self, is_active: bool, mode: str = "add_rectangle") -> None:
+        self.toolbar.set_roi_opt_checked(is_active, option=mode)
         if is_active:
-            self.status_mgr.show_message(MSG_ROI_ACTIVE)
+            if mode == "add_rectangle":
+                self.status_mgr.show_message("Modo ROI: Rectangulo activo, arrastre para crear poligono", TIMEOUT_SHORT)
+            elif mode == "add_polygon":
+                self.status_mgr.show_message("Modo ROI: Poligono activo, presione enter para crear poligono", TIMEOUT_SHORT)
 
     def existe_poligono(self, tiene_datos: bool) -> None:
         self.toolbar.set_analyze_enabled(self.archivo_cargado)
         self.toolbar.set_reset_enabled(tiene_datos)
         if tiene_datos:
-            self.status_mgr.show_message(MSG_ROI_READY, TIMEOUT_MEDIUM)
+            self.toolbar.set_link_enabled(self.last_buildings_gpkg_path is not None and os.path.exists(self.last_buildings_gpkg_path))
+            self.status_mgr.show_message(MSG_ROI_READY, TIMEOUT_SHORT)
 
     def _connect_signals(self) -> None:
         self.toolbar.action_open.triggered.connect(self.abrir_archivo)
@@ -200,12 +205,8 @@ class MainWindow(QMainWindow):
         self.sidebar_mgr.limpiar()
         gc.collect()
 
-    def toggle_modo_roi(self, activar: bool | None = None, mode: str = "add_rectangle") -> None:
-        if not self.archivo_cargado:
-            QMessageBox.warning(self, "Cargar Imagen", "Carga una imagen para trazar el ROI.")
-            self.status_mgr.show_message("No hay imagen cargada.")
-            return
-        self.roi_manager.activar_herramienta(activar, mode)
+    def toggle_modo_roi(self, mode: str = "add_rectangle") -> None:
+        self.roi_manager.activar_herramienta( mode)
 
     def analizar_imagen(self) -> None:
         try:
@@ -252,10 +253,10 @@ class MainWindow(QMainWindow):
 
             self.status_mgr.show_progress()
             self.toolbar.set_all_enabled(False)
-            self.toggle_modo_roi(False)
 
             self.workerTiler = TilingWorker(loader = self.loader,
                                                 coords=self.roi_manager.coords_roi,
+                                                polygon=self.roi_manager.polygon_coords,
                                                 modelo = self.model, 
                                                 output_dir=analyze_dlg.selected_path)
             self.workerTiler.progress_update.connect(self.status_mgr.update_progress)
@@ -324,7 +325,6 @@ class MainWindow(QMainWindow):
 
         self.status_mgr.show_progress()
         self.toolbar.set_all_enabled(False)
-        print(self.roi_manager.coords_roi)
         self.workerLink = CCPPLinkWorker(
             buildings_path=self.last_buildings_gpkg_path,
             ccpp_points_path=ccpp_path,
@@ -407,7 +407,14 @@ class MainWindow(QMainWindow):
             self.status_mgr.hide_progress()
 
     def reset(self) -> None:
-        self.roi_manager.limpiar()
+        ok = QMessageBox.question(
+            self,
+            "Confirmar Reset",
+            "Se eliminara el ROI actual y se deshabilitara la vinculacion con centros poblados. ¿Deseas continuar?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if ok == QMessageBox.StandardButton.Yes:
+            self.roi_manager.limpiar()
 
     def settings(self) -> None:
         dialog = SettingsDialog(self)
