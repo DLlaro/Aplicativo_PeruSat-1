@@ -37,7 +37,7 @@ class MainWindow(QMainWindow):
 
         self.loader = SatelliteLoader()
         self.viewer_model = ViewerModel()
-        self.viewer_model.theme = 'light'
+        self.viewer_model.theme = 'dark'
 
         self.container = QWidget()
         self.main_layout = QHBoxLayout(self.container)
@@ -58,7 +58,7 @@ class MainWindow(QMainWindow):
 
         self.roi_manager = ROIManager(
             self.viewer_model,
-            onToggleCallback=self.toggle_checked_roi,
+            onToggleCallback=self.toggle_check_roi,
             onDataChanged=self.existe_poligono,
         )
 
@@ -78,13 +78,14 @@ class MainWindow(QMainWindow):
         self.modelo_cargado = exito
         self.status_mgr.show_message(msg, TIMEOUT_LONG if exito else TIMEOUT_MEDIUM)
 
-    def toggle_checked_roi(self, is_active: bool, mode: str = "add_rectangle") -> None:
+    def toggle_check_roi(self, is_active: bool, mode: str = "pan_zoom") -> None:
         self.toolbar.set_roi_opt_checked(is_active, option=mode)
         if is_active:
             if mode == "add_rectangle":
-                self.status_mgr.show_message("Modo ROI: Rectangulo activo, arrastre para crear poligono", TIMEOUT_SHORT)
+                self.status_mgr.show_message("Modo ROI: Rectangulo activo, arrastre para crear poligono", TIMEOUT_MEDIUM)
             elif mode == "add_polygon":
-                self.status_mgr.show_message("Modo ROI: Poligono activo, presione enter para crear poligono", TIMEOUT_SHORT)
+                self.status_mgr.show_message("Modo ROI: Poligono activo, presione enter para crear poligono", TIMEOUT_MEDIUM)
+            self.roi_manager.polygon_coords = None  # resetear coords del polígono al activar modo
 
     def existe_poligono(self, tiene_datos: bool) -> None:
         self.toolbar.set_analyze_enabled(self.archivo_cargado)
@@ -189,7 +190,6 @@ class MainWindow(QMainWindow):
         self.viewer_model.add_image(img_data, name="Preview", contrast_limits=[0, 1])
         self.status_mgr.show_message("Imagen cargada exitosamente", TIMEOUT_LONG)
         self.viewer_model.reset_view()
-
         self.archivo_cargado = True
         self.viewer_panel.show_viewer()
         self.toolbar.set_config_enabled(True)
@@ -206,7 +206,7 @@ class MainWindow(QMainWindow):
         gc.collect()
 
     def toggle_modo_roi(self, mode: str = "add_rectangle") -> None:
-        self.roi_manager.activar_herramienta( mode)
+        self.roi_manager.activar_herramienta(mode)
 
     def analizar_imagen(self) -> None:
         try:

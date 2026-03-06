@@ -17,7 +17,7 @@ class AppToolbar(QToolBar):
 
     def _build_actions(self):
         self.action_open = QAction(
-            self.style().standardIcon(QStyle.StandardPixmap.SP_DirOpenIcon),
+            QIcon(f"{settings.base_path}/assets/icons/upload_raster.svg"),
             "Abrir Imagen",
             self,
         )
@@ -27,12 +27,14 @@ class AppToolbar(QToolBar):
             "Rectangulo", 
             self
         )
+        self.action_roi_rect.setCheckable(True)
         
         self.action_roi_poly = QAction(
             QIcon(f"{settings.base_path}/assets/icons/polygon.svg"),
             "Polígono", 
             self
         )
+        self.action_roi_poly.setCheckable(True)
 
         self.menu_roi = QMenu(self)
         self.menu_roi.addAction(self.action_roi_rect)
@@ -43,8 +45,6 @@ class AppToolbar(QToolBar):
         self.roi_btn.setText("ROI")
         self.roi_btn.setMenu(self.menu_roi)
         self.roi_btn.setPopupMode(QToolButton.InstantPopup)
-
-        self.roi_btn.setCheckable(True)
 
         self.action_analyze = QAction(
             self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowRight),
@@ -61,14 +61,14 @@ class AppToolbar(QToolBar):
         self.action_link_ccpp.setEnabled(False)
 
         self.action_reset = QAction(
-            self.style().standardIcon(QStyle.StandardPixmap.SP_BrowserReload),
+            QIcon(f"{settings.base_path}/assets/icons/reset.svg"),
             "Resetear",
             self,
         )
         self.action_reset.setEnabled(False)
 
         self.action_config = QAction(
-            self.style().standardIcon(QStyle.StandardPixmap.SP_DriveCDIcon),
+            QIcon(f"{settings.base_path}/assets/icons/configuration.svg"),
             "Configuracion",
             self,
         )
@@ -88,12 +88,23 @@ class AppToolbar(QToolBar):
         self.addAction(self.action_config)
 
     def set_roi_opt_checked(self, activo: bool, option = "add_rectangle"):
-        if option == "add_rectangle":
-            self.action_roi_rect.setChecked(activo)
-            self.action_roi_poly.setChecked(False)
-        elif option == "add_polygon":
-            self.action_roi_poly.setChecked(activo)
+        if activo:
+            print(f"Activando modo ROI: {option}")
+            if option == "add_rectangle":
+                self.action_roi_rect.setChecked(activo)
+                self.action_roi_poly.setChecked(not activo)
+                self.action_roi_poly.setEnabled(not activo)
+            elif option == "add_polygon":
+                self.action_roi_rect.setChecked(not activo)
+                self.action_roi_poly.setChecked(activo)
+                self.action_roi_poly.setEnabled(activo)
+        else:
+            print("Desactivando modo ROI")
             self.action_roi_rect.setChecked(False)
+            self.action_roi_rect.setEnabled(True)
+            self.action_roi_poly.setChecked(False)
+            self.action_roi_poly.setEnabled(True)
+            
 
     def set_roi_enabled(self, activo: bool):
         self.roi_btn.setEnabled(activo)
@@ -122,6 +133,5 @@ class AppToolbar(QToolBar):
         self.action_open.setEnabled(enabled)
         self.roi_btn.setEnabled(enabled)
         self.action_analyze.setEnabled(enabled)
-        self.action_reset.setEnabled(enabled)
         self.action_config.setEnabled(enabled)
         self.action_link_ccpp.setEnabled(enabled and self._link_enabled_requested)
