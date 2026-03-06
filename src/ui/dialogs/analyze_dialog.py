@@ -47,8 +47,34 @@ class AnalyzeDialog(QDialog):
         self.lbl_area = QLabel(f"Area estimada: {area_roi_km2:.2f} km2.")
         main_layout.addWidget(self.lbl_area)
 
+<<<<<<< HEAD
+        area = float(area)
+        print("sale de area")
+
+        area_lb = QLabel(f"Área a analizar: {area:.2f} km².")
+        main_layout.addWidget(area_lb)
+
+        if(area > AREA_LIMITE):
+            mensaje = f"\nAdvertencia: Extensión grande, puede tardar más tiempo del esperado."
+            content_layout = QHBoxLayout()
+
+            # Ícono
+            icon_label = QLabel()
+            icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
+            icon_label.setPixmap(icon.pixmap(20, 20))
+            content_layout.addWidget(icon_label, 1)
+
+            # Mensaje
+            message_label = QLabel(mensaje)
+            message_label.setWordWrap(True)
+            content_layout.addWidget(message_label, 9)
+
+            # Agregar al layout principal
+            main_layout.addLayout(content_layout)
+=======
         self.chk_full_image = QCheckBox("Procesar toda la imagen")
         self.chk_full_image.setChecked(not has_roi)
+>>>>>>> 800370b3a58471612c892df19beda09072c45b09
         
         main_layout.addWidget(self.chk_full_image)
         self.chk_full_image.toggled.connect(

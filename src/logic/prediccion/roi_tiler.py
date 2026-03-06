@@ -53,7 +53,6 @@ def roi_to_tiles(
         Funcion para la actualizacion de la barra de progreso
     """
     os.makedirs(out_dir, exist_ok=True)
-    print(polygon_coords)
     with rasterio.open(loader.path) as src:
         x, y, W, H = coords
         bands = src.count
@@ -182,10 +181,10 @@ def roi_to_tiles(
                     i += 1
                     pbar.update(1)
 
-                    # Reportar progreso del tiling
-                    if progress_callback:
-                        progress = int((pbar.n / total_tiles) * 100)
-                        progress_callback(progress, f"Generando tiles: {pbar.n}/{total_tiles}")
+                # Reportar progreso del tiling
+                if progress_callback:
+                    progress = int((i / total_tiles) * 100)
+                    progress_callback(progress, 100, f"Generando tiles:")
 
     # ===== PASO 3: Guardar metadatos =====
 

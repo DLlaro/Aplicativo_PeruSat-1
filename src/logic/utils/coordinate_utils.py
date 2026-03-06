@@ -44,9 +44,32 @@ def _pixel_to_latlon(pixel_x: float, pixel_y: float, transform, crs) -> tuple[fl
         
         return (lat, lon)
 
+<<<<<<< HEAD
+def rectangle_to_coords(layer, scale_factor) -> tuple[float, float, float, float]:
+        """
+        Extrae las coordenadas y dimensiones reales del ROI si es un rectangulo o
+        el bounding box si es un poligono
+        
+        Args:
+            layer: Capa dibujada por el usuario en el visor
+                    
+        Returns:
+            tuple: (real_x, real_y, real_w, real_h)
+        """
+        if layer is None:
+                return None
+        
+        data = layer.data
+        if not data or len(data) == 0:
+                return None
+        
+        shape_data = data[-1]
+        shape_data = np.array(shape_data)
+=======
 def get_rectangle_area_km2(original_shape, transform) -> float:
         dy = original_shape[0] 
         dx = original_shape[1]
+>>>>>>> 800370b3a58471612c892df19beda09072c45b09
 
         dy_real = dy * abs(transform.e)
         dx_real = dx * abs(transform.a)

@@ -56,7 +56,6 @@ def predict_tiles_multiclase(
 
             with torch.inference_mode():
                 logits = model(image_t)
-
                 if logits.shape[1] == 1:
                     probs = torch.sigmoid(logits).squeeze(0).squeeze(0)
                     mask_t = (probs > threshold).to(torch.uint8)

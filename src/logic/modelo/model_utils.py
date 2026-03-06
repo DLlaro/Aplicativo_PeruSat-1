@@ -43,7 +43,6 @@ def cargar_recargar_modelo(
             settings.model_path = ""
             model = None
             return False, None, "Archivo no encontrado"
-
         checkpoint = torch.load(
             nueva_ruta,
             map_location=settings.torch_device,
