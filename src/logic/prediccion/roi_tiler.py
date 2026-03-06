@@ -184,7 +184,7 @@ def roi_to_tiles(
 
                 # Reportar progreso del tiling
                 if progress_callback:
-                    progress = int((i / total_tiles) * 100)
+                    progress = int((pbar.n / total_tiles ) * 100)
                     progress_callback(progress, f"Generando tiles:")
 
     # ===== PASO 3: Guardar metadatos =====
