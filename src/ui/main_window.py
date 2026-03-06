@@ -234,7 +234,8 @@ class MainWindow(QMainWindow):
 
             process_full = analyze_dlg.process_full_image
             if process_full:
-                self.roi_manager.coords_roi = self.loader.get_image_coords()
+                h, w = self.loader.get_original_shape()
+                self.roi_manager.coords_roi = (0, 0, w, h)
             else:
                 if not has_roi:
                     QMessageBox.warning(

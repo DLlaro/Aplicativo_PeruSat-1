@@ -52,8 +52,8 @@ def cargar_recargar_modelo(
 
         state_dict = checkpoint["state_dict"] if isinstance(checkpoint, dict) and "state_dict" in checkpoint else checkpoint
         out_classes = _infer_out_classes(state_dict if isinstance(state_dict, dict) else {})
-
-        model = BuildingRoadModel("Unet", "resnet34", in_channels=3, out_classes=out_classes)
+        encoder_name = settings.model_encoder
+        model = BuildingRoadModel("Unet", encoder_name, in_channels=3, out_classes=out_classes)
 
         if not isinstance(state_dict, dict):
             return False, None, "Formato de checkpoint no soportado"
@@ -70,11 +70,21 @@ def cargar_recargar_modelo(
         model.to(settings.torch_device)
         model.eval()
 
-        return True, model, f"Modelo cargado: {os.path.basename(nueva_ruta)}"
+        return True, model, f"Modelo cargado: {os.path.basename(nueva_ruta)} ({encoder_name})"
 
     except Exception as e:
-        print(f"Error detallado: {e}")
-        return False, None, f"Error: {str(e)}"
+        detailed_error = str(e)
+        print(f"Error detallado: {detailed_error}")
+        if "Error(s) in loading state_dict" in detailed_error:
+            return (
+                False,
+                None,
+                (
+                    f"Error: pesos incompatibles con encoder '{settings.model_encoder}'. "
+                    f"Verifica que el modelo haya sido entrenado con ese encoder.\n{detailed_error}"
+                ),
+            )
+        return False, None, f"Error: {detailed_error}"
 
 
 def limpiar_memoria(model: BuildingRoadModel = None):
