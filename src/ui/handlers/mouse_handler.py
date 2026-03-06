@@ -103,6 +103,7 @@ class MouseHandler:
 
         # ← everything below runs on RELEASE
         ## Toma las coordenadas reales crudas del dibujo
+        #print("entra dibujando el poligono")
         self.mw.roi_manager.roi_to_coords(self.mw.loader)  # esto actualiza self.mw.roi_manager.coords_roi con las coordenadas reales del ROI
 
         release_pos = event.position

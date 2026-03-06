@@ -34,6 +34,14 @@ class ROIManager:
 
         self._preparar_capas()
 
+    @property
+    def isActivated(self):
+        return self._is_activated
+    
+    @isActivated.setter
+    def isActivated(self, value: bool):
+        self._is_activated = value
+
     def _preparar_capas(self) -> None:
         """
         Crea la capa una sola vez y la deja lista.
@@ -67,11 +75,10 @@ class ROIManager:
         """
         self.isActivated = not self.isActivated
 
+        if self.on_toggle_callback:
+            self.on_toggle_callback(self.isActivated, mode)
         # Notify UI of toggle state
         if self.isActivated:
-            if self.on_toggle_callback:
-                self.on_toggle_callback(True, mode)
-
             self._activar_modo_dibujo(mode)
         else:
             self._desactivar_modo_dibujo()
@@ -108,6 +115,33 @@ class ROIManager:
         if self.on_data_changed_callback:
             self.on_data_changed_callback(len(self.layer.data) > 0)
 
+    def on_polygon_confirm(self, scale):
+        """Valida, limpia y prepara el ROI actual."""
+        layer = self.layer
+        
+        if layer.mode == 'add_polygon':
+            layer._finish_drawing()
+
+        if len(layer.data) == 0:
+            return None
+
+        ultimo_poly = layer.data[-1]
+
+        # Validación geométrica
+        if len(ultimo_poly) < 3:
+            layer.data = layer.data[:-1]
+            return None
+
+        # Limpieza de polígonos anteriores
+        layer.data = [ultimo_poly]
+        self.polygon_coords = ultimo_poly/scale # Guardamos el array real limpio
+        
+        # Reset visual
+        layer.mode = 'pan_zoom'
+        layer.mode = 'add_polygon'
+        
+        return self.polygon_coords
+
     def limpiar(self) -> None:
         """
         Limpia los datos de la capa ROI, desactiva modo dibujo y oculta la capa.
@@ -122,6 +156,8 @@ class ROIManager:
         
         self.isActivated = False
         self.coords_roi = None
+        self.polygon_coords = None
+
 
         if self.on_data_changed_callback:
             self.on_data_changed_callback(False)

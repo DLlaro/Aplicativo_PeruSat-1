@@ -54,6 +54,7 @@ def roi_to_tiles(
     """
     os.makedirs(out_dir, exist_ok=True)
     with rasterio.open(loader.path) as src:
+        print(coords)
         x, y, W, H = coords
         bands = src.count
         transform = src.transform
@@ -90,7 +91,7 @@ def roi_to_tiles(
 
                     # Definimos la ventana teórica (puede estar fuera de los límites del TIF)
                     window = Window(xi, yi, tile_size, tile_size)
-                    # LEER CON BOUNDLESS: 
+                    # LEER CON BOUNDLESS:
                     # Si xi o yi están fuera, o si la ventana excede el ancho/alto, 
                     # rasterio rellena automáticamente con fill_value (ceros).
                     tile = src.read(window=window, boundless=True, fill_value=0)

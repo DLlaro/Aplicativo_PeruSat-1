@@ -38,12 +38,34 @@ class AppConfig:
     @property
     def model_path(self):
         # Ruta por defecto dinámica (basada en donde se instaló la app)
-        default_model = os.path.join(self.base_path, "logic", "modelo", "mi_modelo.h5")
+        default_model = os.path.join(self.base_path, "logic", "modelo", "mi_modelo.pth")
         return self.settings.value("model/path", default_model)
 
     @model_path.setter
     def model_path(self, value):
         self.settings.setValue("model/path", value)
+
+    @property
+    def model_encoder(self):
+        valid_encoders = {"resnet34", "resnet50"}
+        value = str(self.settings.value("model/encoder", "")).strip().lower()
+        if value in valid_encoders:
+            return value
+
+        # Fallback heuristico para configuraciones antiguas sin `model/encoder`.
+        model_name = os.path.basename(str(self.model_path)).lower()
+        if "resnet50" in model_name:
+            return "resnet50"
+        return "resnet34"
+
+    @model_encoder.setter
+    def model_encoder(self, value):
+        valid_encoders = {"resnet34", "resnet50"}
+        normalized = str(value).strip().lower()
+        self.settings.setValue(
+            "model/encoder",
+            normalized if normalized in valid_encoders else "resnet34",
+        )
 
     @property
     def use_gpu_inference(self):
