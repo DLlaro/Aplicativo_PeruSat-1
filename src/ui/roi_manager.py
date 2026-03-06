@@ -4,9 +4,11 @@ from constants import (ROI_EDGE_COLOR,
                        ROI_FACE_COLOR
                        )
 from typing import Callable
-
+from qtpy.QtCore import QTimer
 from logic.image_loader import SatelliteLoader
 from logic.utils import get_rectangle_area_km2
+
+import numpy as np
 
 class ROIManager:
     def __init__(self, viewer_model: ViewerModel, 
@@ -27,6 +29,8 @@ class ROIManager:
         self.isActivated = False
         self.area_km2 = 0.0
         self.coords_roi = None
+        self.polygon_coords = None
+        self.count = 0
 
         self._preparar_capas()
 
@@ -46,13 +50,12 @@ class ROIManager:
                 ndim=2,
                 visible=False
             )
-        
         try:
             self.layer.events.data.connect(self._on_data_changed)
         except:
             pass
 
-    def activar_herramienta(self, isActivated: bool = None, mode: str = "add_rectangle") -> None:
+    def activar_herramienta(self, mode: str = "add_rectangle") -> None:
         """
         Alternar el modo de dibujo del ROI
         
@@ -62,13 +65,13 @@ class ROIManager:
             - True → El modo dibujo esta activado
             - False → El modo dibujo esta desactivado
         """
-        self.isActivated = isActivated if isActivated is not None else not self.isActivated
+        self.isActivated = not self.isActivated
 
         # Notify UI of toggle state
-        if self.on_toggle_callback:
-            self.on_toggle_callback(self.isActivated)
-
         if self.isActivated:
+            if self.on_toggle_callback:
+                self.on_toggle_callback(True, mode)
+
             self._activar_modo_dibujo(mode)
         else:
             self._desactivar_modo_dibujo()
@@ -90,16 +93,17 @@ class ROIManager:
         self.viewer.layers.selection.clear()
 
     def _on_data_changed(self, event):
-
         if self.layer is None or self._updating:
             return
         
-        if len(self.layer.data) > 1:
+        if len(self.layer.data) > 1 and self.layer.mode == "add_rectangle":
             self._updating = True
             try:
                 self.layer.data = self.layer.data[-1:]
             finally:
                 self._updating = False
+
+        ## LA logica del add_poligon se maneja al dar enter
 
         if self.on_data_changed_callback:
             self.on_data_changed_callback(len(self.layer.data) > 0)
@@ -135,6 +139,66 @@ class ROIManager:
             - False → No existen datos en la capa
         """
         return self.layer is not None and len(self.layer.data) > 0
+    
+    def roi_to_coords(self, loader: SatelliteLoader) -> tuple[float, float, float, float]:
+        """
+        Extrae las coordenadas y dimensiones reales del ROI si es un rectangulo o
+        el bounding box si es un poligono
+        
+        Args:
+            layer: Capa dibujada por el usuario en el visor
+                    
+        Returns:
+            tuple: (real_x, real_y, real_w, real_h)
+        """
+        if self.layer is None:
+            return None
+        
+        data = self.layer.data
+        if not data or len(data) == 0:
+                return None
+        
+        shape_data = data[-1]
+        shape_data = np.array(shape_data)
+
+        # shape_data tiene forma (n_vertices, 2) donde cada fila es [y, x]
+        # Extraemos las coordenadas y calculamos el bounding box
+        y_coords = shape_data[:, 0]
+        x_coords = shape_data[:, 1]
+        
+        y_min, y_max = y_coords.min(), y_coords.max()
+        x_min, x_max = x_coords.min(), x_coords.max()
+        
+        real_x = int(x_min / loader.scale_factor)
+        real_y = int(y_min / loader.scale_factor)
+        real_w = int((x_max - x_min) / loader.scale_factor)
+        real_h = int((y_max - y_min) / loader.scale_factor)
+        
+        self.coords_roi= (real_x, real_y, real_w, real_h)
+        self._actualizar_coords_validas(loader.original_shape, loader.transform)
+
+    def _actualizar_coords_validas(self, shape, transform):
+        true_w, true_h, inter_x1, inter_y1 = self._get_valid_shape_roi(shape)
+        if true_w <= 0 or true_h <= 0:
+            self.coords_roi = None
+        
+        self.coords_roi = (inter_x1, inter_y1, true_w, true_h)
+        self.area_km2 = get_rectangle_area_km2((self.coords_roi[3], self.coords_roi[2]), transform)
+
+    def _get_valid_shape_roi(self, shape) -> float :
+        roi_x, roi_y, roi_w, roi_h = self.coords_roi
+        img_h, img_w = shape
+
+        inter_x1 = max(0, roi_x)
+        inter_y1 = max(0, roi_y)
+        inter_x2 = min(img_w, roi_x + roi_w)
+        inter_y2 = min(img_h, roi_y + roi_h)
+
+        # 3. Calcular dimensiones w,h del roi valido
+        true_w = inter_x2 - inter_x1
+        true_h = inter_y2 - inter_y1
+
+        return true_w, true_h, inter_x1, inter_y1
     
     def validar_roi(self, min_area_km2=10, shape: tuple = None) -> bool | str:
         """
@@ -183,29 +247,6 @@ class ROIManager:
             return False, f"Área útil insuficiente: {self.area_km2:.2f} km²"
 
         return True, f"{self.area_km2:.2f}"
-    
-    def _actualizar_coords_validas(self, shape, transform):
-        true_w, true_h, inter_x1, inter_y1 = self._get_valid_shape_roi(shape)
-        if true_w <= 0 or true_h <= 0:
-            self.coords_roi = None
-        
-        self.coords_roi = (inter_x1, inter_y1, true_w, true_h)
-        self.area_km2 = get_rectangle_area_km2((self.coords_roi[3], self.coords_roi[2]), transform)
-    
-    def _get_valid_shape_roi(self, shape) -> float :
-        roi_x, roi_y, roi_w, roi_h = self.coords_roi
-        img_h, img_w = shape
-
-        inter_x1 = max(0, roi_x)
-        inter_y1 = max(0, roi_y)
-        inter_x2 = min(img_w, roi_x + roi_w)
-        inter_y2 = min(img_h, roi_y + roi_h)
-
-        # 3. Calcular dimensiones w,h del roi valido
-        true_w = inter_x2 - inter_x1
-        true_h = inter_y2 - inter_y1
-
-        return true_w, true_h, inter_x1, inter_y1
     
     def _calcular_overflow(self, shape, tolerance= 512) -> tuple [bool, str]:
         roi_x, roi_y, roi_w, roi_h = self.coords_roi
