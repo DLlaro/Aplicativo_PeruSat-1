@@ -1,4 +1,5 @@
 from PySide6.QtCore import QThread, Signal
+from typing import Optional
 
 class BaseWorker(QThread):
     progress_update = Signal(int, str, bool)
@@ -8,8 +9,8 @@ class BaseWorker(QThread):
     def progress(self, 
                  valor: int = 0, 
                  msg: str = "",
-                 type: str = 'bar', 
-                 infinite: bool = False) -> None:
+                 type: Optional[str] = 'bar', 
+                 infinite: Optional[bool] = False) -> None:
         """
         Emite la señal a la barra de progreso y los mensajes del statusbar dependiendo del tipo.
 

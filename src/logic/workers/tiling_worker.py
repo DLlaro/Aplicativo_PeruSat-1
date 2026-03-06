@@ -12,12 +12,14 @@ class TilingWorker(BaseWorker):
 
     def __init__(self, 
                  loader: SatelliteLoader,
-                 coords: tuple, 
+                 coords: tuple,
+                 polygon: None,
                  modelo: BuildingRoadModel, 
                  output_dir: str) -> None:
         super().__init__()
         self.loader = loader
         self.coords = coords
+        self.polygon = polygon
         self.modelo = modelo
         self.output_path = output_dir
 
@@ -52,10 +54,10 @@ class TilingWorker(BaseWorker):
 
                 print("\n[1/5] Generando tiles...")
                 roi_to_tiles(coords = self.coords,
-                            scale_factor = 1/self.loader.scale_factor,
                             tif_name = TIF_ID,
                             loader = self.loader,
-                            out_dir = paths['tiles'], 
+                            out_dir = paths['tiles'],
+                            polygon_coords=self.polygon,
                             tile_size = 512, 
                             overlap = 0,
                             progress_callback = self.progress)
@@ -88,7 +90,14 @@ class TilingWorker(BaseWorker):
                 )
                 shape = load_vector_to_napari(buildings_path, self.loader)
 
-            self.finished.emit(shape)
+            result = {
+                "shape": shape,
+                "buildings_gpkg": buildings_path,
+                "gpkg_paths": gpkg_paths,
+                "base_output": base_output,
+            }
+
+            self.finished.emit(result)
         except Exception as e:
             print(e)
             self.error.emit(str(e))

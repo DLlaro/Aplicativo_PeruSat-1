@@ -4,3 +4,4 @@ from .reconstruccion import stitch_tiles_by_class
 from .to_gpkg import raster_to_vector
 from .limpiar_archivos import clean_temp_files
 from .cargar_capa import load_vector_to_napari
+from .vincular_ccpp import link_buildings_to_ccpp

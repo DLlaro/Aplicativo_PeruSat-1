@@ -44,6 +44,7 @@ def _pixel_to_latlon(pixel_x: float, pixel_y: float, transform, crs) -> tuple[fl
         
         return (lat, lon)
 
+<<<<<<< HEAD
 def rectangle_to_coords(layer, scale_factor) -> tuple[float, float, float, float]:
         """
         Extrae las coordenadas y dimensiones reales del ROI si es un rectangulo o
@@ -64,17 +65,13 @@ def rectangle_to_coords(layer, scale_factor) -> tuple[float, float, float, float
         
         shape_data = data[-1]
         shape_data = np.array(shape_data)
+=======
+def get_rectangle_area_km2(original_shape, transform) -> float:
+        dy = original_shape[0] 
+        dx = original_shape[1]
+>>>>>>> 800370b3a58471612c892df19beda09072c45b09
 
-        # shape_data tiene forma (n_vertices, 2) donde cada fila es [y, x]
-        y_coords = shape_data[:, 0]
-        x_coords = shape_data[:, 1]
-        
-        y_min, y_max = y_coords.min(), y_coords.max()
-        x_min, x_max = x_coords.min(), x_coords.max()
-        
-        real_x = int(x_min / scale_factor)
-        real_y = int(y_min / scale_factor)
-        real_w = int((x_max - x_min) / scale_factor)
-        real_h = int((y_max - y_min) / scale_factor)
-        
-        return (real_x, real_y, real_w, real_h)
+        dy_real = dy * abs(transform.e)
+        dx_real = dx * abs(transform.a)
+
+        return (dy_real * dx_real)/ 1_000_000

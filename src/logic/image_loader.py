@@ -1,42 +1,60 @@
 import rasterio
+import rasterio.errors
 from rasterio.enums import Resampling
-from tqdm import tqdm
+from affine import Affine
+from pyproj import CRS
 import numpy as np
 from numpy.typing import NDArray
 from numpy import float32, uint8
-from rasterio.windows import Window
+import os
 
 from logic.utils.config_manager import settings
-
-from constants import MAX_LIMIT_RENDER, MAX_LIMIT_RENDER_UNLOCK
-
-from typing import TypeAlias, Callable,  Optional, Tuple
-
-ProgressCallback: TypeAlias = Callable[[int, str, str, bool], None]
+from logic.utils import get_rectangle_area_km2
+from typing import  Optional, Tuple
 
 class SatelliteLoader:
     def __init__(self) -> None:
-        self.path: str = None
+        """
+        Args
+        -----
+        self.path: str
+            ruta absoluta de la imagen
+        self.original_shape : tuple
+            H x W de la imagen entera (incluye el nodata)
+        self.scaled_shape: tuple
+            H x W de la imagen escalada 
+        self.transform : Affine
+            Matriz de transformacion afin de la imagen
+        self.crs: CRS
+            Sistema de coordenadas referenciado de la imagen
+        self.bands: list
+            list de bandas `(arbitrariamente se coloco 3 bandas)`
+        self.global_hi: list
+            Lista de los valores del percentil 98 del conjunto de train usados para normalizar
+        self.global_lo: list
+            Lista de los valores del percentil 2 del conjunto de train usados para normalizar
+        """
+        self.path: str = ""
         self.original_shape: Optional[Tuple[int, int]] = None  # (H, W)
         self.scaled_shape: Optional[Tuple[int, int]] = None
         self.scale_factor: float = 1.0
-        self.transform = None
-        self.crs = None
-        self.bands = None
-        self.global_lo: Optional[float] = None
-        self.global_hi: Optional[float] = None
+        self.transform : Affine
+        self.crs : CRS
+        self.bands: list
+        self.global_lo: Optional[NDArray[float32]] = None
+        self.global_hi: Optional[NDArray[float32]] = None
     
     def load_metadata(self, path: str) -> Tuple[int, int]:
         """
         Lee los metadatos básicos del raster (height y width).
 
         Parameters
-        ----------
+        -----
         path : str | Path
             Ruta al archivo raster.
 
         Returns
-        -------
+        -----
         Tuple[int, int]
             (height, width)
         """
@@ -63,7 +81,7 @@ class SatelliteLoader:
         
     def get_original_shape(self) -> Tuple[int, int]:
         """
-        Devuelve el shape original del raster.
+        Devuelve el shape original del raster (H x W)
 
         Raises
         ------
@@ -74,10 +92,35 @@ class SatelliteLoader:
             raise ValueError("No se ha cargado metadata todavía.")
 
         return self.original_shape
+    
+    def get_res_px_per_side(self) -> tuple:
+        """
+        Obtener la resolucion de los pixeles del alto y ancho de la imagen
+
+        returns
+        -----
+        (res_x, res_y) : tuple
+            Valores de la resolucion del eje x y y de la imagen
+        """
+        if self.original_shape is None:
+            raise ValueError("No se ha cargado metadata todavía.")
+        res_x = abs(self.transform.a)
+        res_y = abs(self.transform.e)
+
+        return res_x, res_y
+    
+    def get_image_area_km2(self) -> float:
+        return get_rectangle_area_km2(self.original_shape, self.transform)
+    
+    def get_image_coords(self) -> NDArray[np.float64]:
+        if self.scaled_shape is None:
+            raise ValueError("No hay preview cargada para construir la extension completa.")
+        h, w = self.original_shape
+        return 0, 0, h, w # se resta uno para evitar index out of bounds
 
     def get_preview(self,
                     escala_input: int = 50,
-                    progress_callback: ProgressCallback = None) -> NDArray[float32]:
+                    progress_callback = None) -> Optional[NDArray[float32]]:
         """
         Lee una imagen reescalada (downsampled) del raster para una visualización rápida, 
         calcula los percentiles 2-98.
@@ -94,16 +137,16 @@ class SatelliteLoader:
 
         return
         ----------
-        NDArray[float32]
+        data : NDArray[float32]
             Arreglo numpy de la imagen normalizada a 0-1
         """
         try:
-            with rasterio.open(self.path) as src:
-                #print("unlock", self.unlock)     
+            with rasterio.open(self.path) as src:    
                 self.scale_factor = escala_input /100
                 self.scaled_shape = int(src.height * self.scale_factor), int(src.width * self.scale_factor)
                 
-                progress_callback(10, msg = "Reescalando...", infinite = True)
+                if progress_callback:
+                    progress_callback(10, msg = "Reescalando...", infinite = True)
 
                 # Lectura y reescalado de la imagen a nuevas dimensiones
                 data = src.read(
@@ -113,22 +156,23 @@ class SatelliteLoader:
                 )
 
                 data = np.transpose(data, (1, 2, 0))  # (3, H, W) → (H, W, 3)
+                self.load_global_percentiles() ##Cargar percentiles
+                
+                data = self._normalize_percentiles_per_band(data, progress_callback= progress_callback) / 255 # division entre 255 porque visor requiere valores entre 0-1
 
-                self.compute_global_percentiles_stream_per_band()
-
-            return self._normalize_percentiles_per_band(data, progress_callback= progress_callback)/255 # division entre 255 porque visor requiere valores entre 0-1
+            return data
 
         except Exception as e:
             print(f"Error en image loader: {e}")
             return
 
-    def compute_global_percentiles_stream_per_band(self) -> None:
-        self.global_lo = np.load(r"C:\PI\Programa\Aplicativo_PeruSat-1\src\assets\valores_normalizados\percentiles_lo.npy")
-        self.global_hi = np.load(r"C:\PI\Programa\Aplicativo_PeruSat-1\src\assets\valores_normalizados\percentiles_hi.npy")
+    def load_global_percentiles(self) -> None:
+        self.global_lo = np.load(os.path.join(settings.base_path, "assets", "valores_normalizados", "percentiles_lo.npy"))
+        self.global_hi = np.load(os.path.join(settings.base_path, "assets", "valores_normalizados", "percentiles_hi.npy"))
 
     def _normalize_percentiles_per_band(self, x: NDArray,
-                                    nodata_value: int =None,
-                                    progress_callback: ProgressCallback = None) -> NDArray[uint8]:
+                                    nodata_value: int =0,
+                                    progress_callback = None) -> NDArray[uint8]:
         """
         Normaliza la imagen por banda del raster usando los percentiles calculados
 
@@ -137,10 +181,14 @@ class SatelliteLoader:
         x: NDArray
             (height, width, n_bands) for numpy
         nodata_value: int
-            valor de NoData en el raster
+            valor de NoData en el raster (0 para PeruSat-1)
+        progress_callback: ProgressCallback
+            Funcion para la actualizacion de la barra de progreso
         """
+        if self.global_hi is None or self.global_lo is None:
+            raise ValueError("Los percentiles globales no se han cargado correctamente.")
+        
         if x.dtype == np.uint8 and x.max() <= 255:
-            print("La imagen ya está en uint8. Saltando normalización.")
             return x
         
         x_norm = np.zeros_like(x, dtype = np.float32)
@@ -150,17 +198,17 @@ class SatelliteLoader:
                 valid = band != nodata_value
                 x_norm[..., b][valid] = np.clip((band[valid] - self.global_lo[b]) / (self.global_hi[b] - self.global_lo[b] + 1e-6), 0, 1)
             else:
-                x_norm[..., b]= np.clip((band - self.global_lo[b]) / (self.global_hi[b] - self.global_lo[b] + 1e-6), 0, 1)
+                x_norm[..., b] = np.clip((band - self.global_lo[b]) / (self.global_hi[b] - self.global_lo[b] + 1e-6), 0, 1)
             
-            if progress_callback:
-                progress = int((b/x.shape[-1])*100)
+            if progress_callback is not None:
+                progress = int(((b+1)/x.shape[-1])*100)
                 progress_callback(progress, msg = f"Normalizando banda{b}")
 
         out = (x_norm * 254 + 1).astype(np.uint8)## convertir valores cercanos a 0 a 1 para que no sean tratados como nodata
-        
+
         if nodata_value is not None:
             # Un pixel es valido si al menos una banda es distinta de nodata
-            valid_mask = np.any(x != nodata_value, axis=-1)
+            valid_mask = np.all(x != nodata_value, axis=-1)
             out[~valid_mask] = 0
         
         return out

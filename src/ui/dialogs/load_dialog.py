@@ -1,6 +1,10 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
+<<<<<<< HEAD
                                QSpinBox, QPushButton, QLineEdit, QFrame, QFileDialog)
 
+=======
+                               QSpinBox, QPushButton, QLineEdit, QFrame)
+>>>>>>> 800370b3a58471612c892df19beda09072c45b09
 from logic.utils.utils import get_ram_info
 from logic.utils.config_manager import settings
 from constants import MAX_LIMIT_RENDER
@@ -14,7 +18,6 @@ class LoadDialog(QDialog):
         self.h = shape[0]
         self.w = shape[1]
         self.max_scale = min(((settings.max_render - 500) / max(self.w, self.h)*100), 100)
-        print(settings.max_render)
         
         self._setup_ui()
         self._update_dimensions()
@@ -41,7 +44,7 @@ class LoadDialog(QDialog):
         self.spin_escala.setSingleStep(5)
         self.spin_escala.setSuffix("%")
         self.spin_escala.setValue(self.max_scale/2)
-        self.spin_escala.setToolTip("10-50%: Sin GPU, 10-100%: Con GPU")
+        self.spin_escala.setToolTip(f"10%: Original, {self.max_scale}%: Max permitido")
 
         scale_layout.addWidget(self.spin_escala)
 
@@ -143,7 +146,6 @@ class LoadDialog(QDialog):
     
     def _unlock_scale(self):       
         self.spin_escala.setRange(10, self.max_scale)
-        self.spin_escala.setToolTip(f"10%: Original, {self.max_scale}%: Max permitido")
 
     def _lock_scale(self):
         current = self.spin_escala.value()
