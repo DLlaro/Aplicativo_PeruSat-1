@@ -138,8 +138,8 @@ class SatelliteLoader:
             return
 
     def compute_global_percentiles_stream_per_band(self) -> None:
-        self.global_lo = np.load(r"C:\PI\Programa\Aplicativo_PeruSat-1\src\assets\valores_normalizados\percentiles_lo.npy")
-        self.global_hi = np.load(r"C:\PI\Programa\Aplicativo_PeruSat-1\src\assets\valores_normalizados\percentiles_hi.npy")
+        self.global_lo = np.load(r"D:\buildings\Aplicativo_PeruSat-1\src\assets\valores_normalizados\percentiles_lo.npy")
+        self.global_hi = np.load(r"D:\buildings\Aplicativo_PeruSat-1\src\assets\valores_normalizados\percentiles_hi.npy")
 
     def _normalize_percentiles_per_band(self, x: NDArray,
                                     nodata_value: int =0,
