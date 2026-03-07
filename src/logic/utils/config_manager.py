@@ -112,7 +112,8 @@ class AppConfig:
         
     @property
     def torch_device(self):
-        return torch.device('cuda' if torch.cuda.is_available() and settings.use_gpu_inference else 'cpu')
+        return torch.device('cuda' if torch.cuda.is_available() and self.use_gpu_inference else 'cpu')
+    
 
     @property
     def logo_path(self):
