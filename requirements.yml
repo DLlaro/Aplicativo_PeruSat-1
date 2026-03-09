@@ -1,0 +1,26 @@
+name: env312
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.12
+  - pytorch
+  - torchvision
+  - pytorch-cuda=12.1
+  - pip
+
+  - pip:
+      - "napari[all]"
+      - lightning
+      - rasterio
+      - pyproj
+      - shapely
+      - geopandas
+      - albumentations
+      - matplotlib
+      - tqdm
+      - PySide6
+      - git+https://github.com/qubvel/segmentation_models.pytorch

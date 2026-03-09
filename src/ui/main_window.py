@@ -10,12 +10,12 @@ from constants import (
     DEFAULT_WINDOW_HEIGHT,
     DEFAULT_WINDOW_WIDTH,
     MIN_AREA_KM2,
-    MSG_ROI_ACTIVE,
-    MSG_ROI_READY,
     TIMEOUT_LONG,
     TIMEOUT_MEDIUM,
     TIMEOUT_SHORT
 )
+from assets.strings import Strings as S
+
 from logic.image_loader import SatelliteLoader
 from logic.modelo.model_utils import cargar_recargar_modelo
 from logic.utils.config_manager import settings
@@ -31,7 +31,7 @@ from logic.prediccion import load_vector_to_napari
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("PeruSat-1 Modular v0.2")
+        self.setWindowTitle(S.APP_TITLE)
         self.resize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
         self.setWindowIcon(QIcon(settings.logo_path))
 
@@ -82,9 +82,9 @@ class MainWindow(QMainWindow):
         self.toolbar.set_roi_opt_checked(is_active, option=mode)
         if is_active:
             if mode == "add_rectangle":
-                self.status_mgr.show_message("Modo ROI: Rectangulo activo, arrastre para crear poligono", TIMEOUT_MEDIUM)
+                self.status_mgr.show_message(S.MSG_ROI_ACTIVE_RECT, TIMEOUT_MEDIUM)
             elif mode == "add_polygon":
-                self.status_mgr.show_message("Modo ROI: Poligono activo, presione enter para crear poligono", TIMEOUT_MEDIUM)
+                self.status_mgr.show_message(S.MSG_ROI_ACTIVE_POLY, TIMEOUT_MEDIUM)
             self.roi_manager.polygon_coords = None  # resetear coords del polígono al activar modo
 
     def existe_poligono(self, tiene_datos: bool) -> None:
@@ -92,7 +92,7 @@ class MainWindow(QMainWindow):
         self.toolbar.set_reset_enabled(tiene_datos)
         if tiene_datos:
             self.toolbar.set_link_enabled(self.last_buildings_gpkg_path is not None and os.path.exists(self.last_buildings_gpkg_path))
-            self.status_mgr.show_message(MSG_ROI_READY, TIMEOUT_SHORT)
+            self.status_mgr.show_message(S.MSG_ROI_READY, TIMEOUT_SHORT)
 
     def _connect_signals(self) -> None:
         self.toolbar.action_open.triggered.connect(self.abrir_archivo)
@@ -166,18 +166,9 @@ class MainWindow(QMainWindow):
         try:
             self.limpiar_visor()
             self.status_mgr.show_progress()
-            self.status_mgr.update_progress(0, "Cargando Imagen")
 
             self.worker = LoadImageWorker(loader=self.loader, escala=input_escala)
             self.worker.progress_update.connect(self.status_mgr.update_progress)
-            self.worker.status_msg.connect(
-                lambda msg: QMessageBox.warning(
-                    self,
-                    "Optimizacion de Escala",
-                    msg,
-                    QMessageBox.StandardButton.Ok,
-                )
-            )
             self.worker.finished.connect(self.finalizar_carga_img)
             self.worker.error.connect(self._on_worker_error)
             self.toolbar.set_all_enabled(False)
@@ -188,12 +179,13 @@ class MainWindow(QMainWindow):
 
     def finalizar_carga_img(self, img_data) -> None:
         self.viewer_model.add_image(img_data, name="Preview", contrast_limits=[0, 1])
-        self.status_mgr.show_message("Imagen cargada exitosamente", TIMEOUT_LONG)
+        self.status_mgr.show_message(S.MSG_IMAGEN_CARGADA, TIMEOUT_LONG)
         self.viewer_model.reset_view()
         self.archivo_cargado = True
         self.viewer_panel.show_viewer()
         self.toolbar.set_config_enabled(True)
         self.toolbar.set_all_enabled(True)
+        #el roi esta en falso
         print("Nueva imagen cargada correctamente.")
 
     def limpiar_visor(self) -> None:
@@ -220,7 +212,7 @@ class MainWindow(QMainWindow):
                 self, 
                 self.loader,
                 area,
-                lambda: self.select_directory(ruta_inicial=self.loader.path),
+                lambda: self.select_directory(titulo=S.OUTPUT_DIR ,ruta_inicial=self.loader.path),
                 has_roi=has_roi,
             )
             ok = analyze_dlg.exec()
@@ -229,7 +221,7 @@ class MainWindow(QMainWindow):
 
             if not analyze_dlg.selected_path:
                 QMessageBox.warning(self, "Path invalido", "Directorio inexistente")
-                self.status_mgr.show_message("Carpeta invalida")
+                self.status_mgr.show_message(S.MSG_CARPETA_INVALIDA)
                 return
 
             process_full = analyze_dlg.process_full_image
@@ -241,7 +233,7 @@ class MainWindow(QMainWindow):
                     QMessageBox.warning(
                         self,
                         "ROI requerido",
-                        "Debes dibujar un ROI o activar 'Procesar toda la imagen'.",
+                        S.MSG_ROI_INEXISTENTE,
                     )
                     return
                 es_valido, mensaje = self.roi_manager.validar_roi(
@@ -283,16 +275,16 @@ class MainWindow(QMainWindow):
             return msg_box.clickedButton() == btn_continuar
 
         QMessageBox.warning(self, "ROI Invalido", mensaje)
-        self.status_mgr.show_message("ROI invalido - ajusta la seleccion")
+        self.status_mgr.show_message(S.MSG_ROI_INVALIDO)
         return False
 
-    def select_directory(self, titulo="Seleccionar Carpeta", ruta_inicial="") -> str | None:
+    def select_directory(self, titulo="", ruta_inicial="") -> str | None:
         folder_path = QFileDialog.getExistingDirectory(self, titulo, ruta_inicial)
         if folder_path:
             return folder_path
         return None
 
-    def select_vector_file(self, titulo="Seleccionar capa vectorial", ruta_inicial="") -> str | None:
+    def select_vector_file(self, titulo="", ruta_inicial="") -> str | None:
         path, _ = QFileDialog.getOpenFileName(
             self,
             titulo,
@@ -306,19 +298,19 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Sin buildings",
-                "Primero debes ejecutar una prediccion de buildings.",
+                S.WRG_CAPA_INEXISTENTE,
             )
             return
 
         ccpp_path = self.select_vector_file(
-            titulo="Seleccionar capa de viviendas de centros poblados",
+            titulo=S.CAPA_VECTORIAL_DIR,
             ruta_inicial=os.path.dirname(self.last_buildings_gpkg_path),
         )
         if not ccpp_path:
             return
 
         output_dir = self.select_directory(
-            titulo="Seleccionar carpeta de exportacion",
+            titulo=S.OUTPUT_DIR,
             ruta_inicial=self.last_prediction_output_dir or os.path.dirname(self.last_buildings_gpkg_path),
         )
         if not output_dir:
@@ -395,7 +387,7 @@ class MainWindow(QMainWindow):
                 self,
                 "Vinculacion completada",
                 (
-                    "Se genero la vinculacion con centros poblados.\n"
+                    f"{S.INFO_VINCULACION_READY}\n"
                     f"Archivo exportado: {output_gpkg}\n"
                     f"Capa Voronoi: {voronoi_layer}\n"
                     f"CRS de distancias: {distance_crs}"
@@ -411,7 +403,7 @@ class MainWindow(QMainWindow):
         ok = QMessageBox.question(
             self,
             "Confirmar Reset",
-            "Se eliminara el ROI actual y se deshabilitara la vinculacion con centros poblados. ¿Deseas continuar?",
+            S.MSG_RESET,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if ok == QMessageBox.StandardButton.Yes:

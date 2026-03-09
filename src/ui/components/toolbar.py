@@ -116,6 +116,7 @@ class AppToolbar(QToolBar):
         self.action_open.setEnabled(enabled)
 
     def set_reset_enabled(self, enabled: bool):
+        self._reset_enabled_requested = enabled
         self.action_reset.setEnabled(enabled)
 
     def set_config_enabled(self, enabled: bool):
@@ -134,4 +135,5 @@ class AppToolbar(QToolBar):
         self.roi_btn.setEnabled(enabled)
         self.action_analyze.setEnabled(enabled)
         self.action_config.setEnabled(enabled)
+        self.action_reset.setEnabled(enabled and self._reset_enabled_requested)
         self.action_link_ccpp.setEnabled(enabled and self._link_enabled_requested)

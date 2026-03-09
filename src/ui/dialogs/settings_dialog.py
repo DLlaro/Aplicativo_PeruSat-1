@@ -38,9 +38,9 @@ class SettingsDialog(QDialog):
         self.chk_render_tot = QCheckBox("Desbloquear renderizado (GPU)")
         self.chk_render_tot.setChecked(settings.unlock_render)
 
-        #Verificar existencia de GPU
+        #Habilitar opciones de GPU
         gpu_info = settings.gpu_info
-        if gpu_info.get("gpu_name", "CPU") == 'CPU' or gpu_info.get("total_mb", 0) <= 6144:
+        if gpu_info.get("gpu_name", "CPU") == 'CPU' or gpu_info.get("total_mb", 0) <= 6142:
             self.chk_gpu.setText("Inferencia por GPU (NVIDIA) (No disponible)")
             self.chk_gpu.setEnabled(False)
             self.chk_render_tot.setEnabled(False)
