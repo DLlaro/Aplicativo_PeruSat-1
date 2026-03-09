@@ -47,7 +47,7 @@ class MouseHandler:
 
             # 3. Conversión Geométrica (Usando tu lógica)
             # Devuelve (X_GEO, Y_GEO) -> invierte y devuelve (Lat(y), Lon(x))
-            x_geo, y_geo, lat, lon  = cursor_to_coords(x_px, y_px, self.mw.loader.scale_factor, self.mw.loader.transform, self.mw.loader.crs)
+            utm_x, utm_y, lat, lon  = cursor_to_coords(x_px, y_px, self.mw.loader.scale_factor, self.mw.loader.transform, self.mw.loader.crs)
             
             # --- MEJORA: GUARDAR DATOS CRUDOS ---
             # Guardamos esto para que la función de COPIAR (Ctrl+C) lo use directo
@@ -58,7 +58,7 @@ class MouseHandler:
             self.mw.keyboard_handler.update_coords(lat, lon)
 
             # Update UI through status_mgr
-            self.mw.status_mgr.update_coords(x_geo, y_geo, lat, lon)
+            self.mw.status_mgr.update_coords(utm_x, utm_y, lat, lon)
 
         except Exception as e:
             # Es útil ver el error en la consola si estás desarrollando

@@ -47,9 +47,7 @@ def roi_to_tiles(
         Proporción antes de descartar parche
     black_tile_threshold: float
         Proporción de area oscura antes de descartar parche
-    progress_callback: Callable[[int, str, str, bool], None] = None
-        - int: 
-    progress_callback: Callable[[int, str, str, bool], None]
+    progress_callback: Callable[[int, str, bool], None] = None
         Funcion para la actualizacion de la barra de progreso
     """
     os.makedirs(out_dir, exist_ok=True)

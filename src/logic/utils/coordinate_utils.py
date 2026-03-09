@@ -15,10 +15,12 @@ def cursor_to_coords(x_napari: float, y_napari: float, scale_factor: float, tran
         real_x = x_napari / scale_factor
         real_y = y_napari / scale_factor
 
+        utm_x, utm_y = transform * (real_x, real_y)
+
         # Convertir píxeles a coordenadas geográficas
         lat, lon = _pixel_to_latlon(real_x, real_y, transform, crs)
 
-        return (real_x, real_y, lat, lon)
+        return (utm_x, utm_y, lat, lon)
 
 def _pixel_to_latlon(pixel_x: float, pixel_y: float, transform, crs) -> tuple[float, float]:
         """

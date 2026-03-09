@@ -9,19 +9,10 @@ DEFAULT_WINDOW_WIDTH = 1200
 DEFAULT_WINDOW_HEIGHT = 800
 LOGO_SIZE = 300
 
-# File paths
-ASSETS_DIR = "assets"
-LOGO_FILENAME = "inei_logo.png"
-
 # ROI visualization
 ROI_EDGE_COLOR = "red"
 ROI_FACE_COLOR = [1, 0, 0, 0.2]
 ROI_EDGE_WIDTH = 2
-
-# Status messages
-MSG_IMAGE_LOADED = "Imagen lista para analizar"
-MSG_ROI_ACTIVE = "Modo Selección: Dibuje un rectángulo en el visor"
-MSG_ROI_READY = "ROI detectado. Listo para análisis."
 
 # Timeouts (milliseconds)
 TIMEOUT_SHORT = 2000
