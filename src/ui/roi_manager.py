@@ -4,6 +4,11 @@ from constants import (ROI_EDGE_COLOR,
                        ROI_FACE_COLOR
                        )
 from typing import Callable
+from qtpy.QtCore import QTimer
+from logic.image_loader import SatelliteLoader
+from logic.utils import get_rectangle_area_km2
+
+import numpy as np
 
 class ROIManager:
     def __init__(self, viewer_model: ViewerModel, 
@@ -23,9 +28,19 @@ class ROIManager:
         self.on_data_changed_callback = onDataChanged # Guardamos el callback
         self.isActivated = False
         self.area_km2 = 0.0
-        self.coords = None
+        self.coords_roi = None
+        self.polygon_coords = None
+        self.count = 0
 
         self._preparar_capas()
+
+    @property
+    def isActivated(self):
+        return self._is_activated
+    
+    @isActivated.setter
+    def isActivated(self, value: bool):
+        self._is_activated = value
 
     def _preparar_capas(self) -> None:
         """
@@ -43,13 +58,12 @@ class ROIManager:
                 ndim=2,
                 visible=False
             )
-        
         try:
             self.layer.events.data.connect(self._on_data_changed)
         except:
             pass
 
-    def activar_herramienta(self, isActivated: bool = None, mode: str = "add_rectangle") -> None:
+    def activar_herramienta(self, mode: str = "add_rectangle") -> None:
         """
         Alternar el modo de dibujo del ROI
         
@@ -59,12 +73,11 @@ class ROIManager:
             - True → El modo dibujo esta activado
             - False → El modo dibujo esta desactivado
         """
-        self.isActivated = isActivated if isActivated is not None else not self.isActivated
+        self.isActivated = not self.isActivated
 
-        # Notify UI of toggle state
         if self.on_toggle_callback:
-            self.on_toggle_callback(self.isActivated)
-
+            self.on_toggle_callback(self.isActivated, mode)
+        # Notify UI of toggle state
         if self.isActivated:
             self._activar_modo_dibujo(mode)
         else:
@@ -87,19 +100,47 @@ class ROIManager:
         self.viewer.layers.selection.clear()
 
     def _on_data_changed(self, event):
-
         if self.layer is None or self._updating:
             return
         
-        if len(self.layer.data) > 1:
+        if len(self.layer.data) > 1 and self.layer.mode == "add_rectangle":
             self._updating = True
             try:
                 self.layer.data = self.layer.data[-1:]
             finally:
                 self._updating = False
 
+        ## LA logica del add_poligon se maneja al dar enter
+
         if self.on_data_changed_callback:
             self.on_data_changed_callback(len(self.layer.data) > 0)
+
+    def on_polygon_confirm(self, scale):
+        """Valida, limpia y prepara el ROI actual."""
+        layer = self.layer
+        
+        if layer.mode == 'add_polygon':
+            layer._finish_drawing()
+
+        if len(layer.data) == 0:
+            return None
+
+        ultimo_poly = layer.data[-1]
+
+        # Validación geométrica
+        if len(ultimo_poly) < 3:
+            layer.data = layer.data[:-1]
+            return None
+
+        # Limpieza de polígonos anteriores
+        layer.data = [ultimo_poly]
+        self.polygon_coords = ultimo_poly/scale # Guardamos el array real limpio
+        
+        # Reset visual
+        layer.mode = 'pan_zoom'
+        layer.mode = 'add_polygon'
+        
+        return self.polygon_coords
 
     def limpiar(self) -> None:
         """
@@ -114,7 +155,9 @@ class ROIManager:
                 self._updating = False
         
         self.isActivated = False
-        self.coords = None
+        self.coords_roi = None
+        self.polygon_coords = None
+
 
         if self.on_data_changed_callback:
             self.on_data_changed_callback(False)
@@ -133,13 +176,73 @@ class ROIManager:
         """
         return self.layer is not None and len(self.layer.data) > 0
     
-    def validar_roi(self, transform, min_area_km2=10, original_shape=None, tolerance=512) -> bool | str:
+    def roi_to_coords(self, loader: SatelliteLoader) -> tuple[float, float, float, float]:
+        """
+        Extrae las coordenadas y dimensiones reales del ROI si es un rectangulo o
+        el bounding box si es un poligono
+        
+        Args:
+            layer: Capa dibujada por el usuario en el visor
+                    
+        Returns:
+            tuple: (real_x, real_y, real_w, real_h)
+        """
+        if self.layer is None:
+            return None
+        
+        data = self.layer.data
+        if not data or len(data) == 0:
+                return None
+        
+        shape_data = data[-1]
+        shape_data = np.array(shape_data)
+
+        # shape_data tiene forma (n_vertices, 2) donde cada fila es [y, x]
+        # Extraemos las coordenadas y calculamos el bounding box
+        y_coords = shape_data[:, 0]
+        x_coords = shape_data[:, 1]
+        
+        y_min, y_max = y_coords.min(), y_coords.max()
+        x_min, x_max = x_coords.min(), x_coords.max()
+        
+        real_x = int(x_min / loader.scale_factor)
+        real_y = int(y_min / loader.scale_factor)
+        real_w = int((x_max - x_min) / loader.scale_factor)
+        real_h = int((y_max - y_min) / loader.scale_factor)
+        
+        self.coords_roi= (real_x, real_y, real_w, real_h)
+        self._actualizar_coords_validas(loader.original_shape, loader.transform)
+
+    def _actualizar_coords_validas(self, shape, transform):
+        true_w, true_h, inter_x1, inter_y1 = self._get_valid_shape_roi(shape)
+        if true_w <= 0 or true_h <= 0:
+            self.coords_roi = None
+        
+        self.coords_roi = (inter_x1, inter_y1, true_w, true_h)
+        self.area_km2 = get_rectangle_area_km2((self.coords_roi[3], self.coords_roi[2]), transform)
+
+    def _get_valid_shape_roi(self, shape) -> float :
+        roi_x, roi_y, roi_w, roi_h = self.coords_roi
+        img_h, img_w = shape
+
+        inter_x1 = max(0, roi_x)
+        inter_y1 = max(0, roi_y)
+        inter_x2 = min(img_w, roi_x + roi_w)
+        inter_y2 = min(img_h, roi_y + roi_h)
+
+        # 3. Calcular dimensiones w,h del roi valido
+        true_w = inter_x2 - inter_x1
+        true_h = inter_y2 - inter_y1
+
+        return true_w, true_h, inter_x1, inter_y1
+    
+    def validar_roi(self, min_area_km2=10, shape: tuple = None) -> bool | str:
         """
         Valida el ROI calculando la intersección real con la imagen.
 
         Calcula el área de solapamiento entre la caja dibujada y los límites 
         reales de la imagen. Si la selección es válida, actualiza
-        self.coords con las coordenadas recortadas listas para un crop seguro.
+        self.coords_roi con las coordenadas recortadas listas para un crop seguro.
 
         Args
         ----------
@@ -162,38 +265,33 @@ class ROIManager:
             - False, mensaje      → ROI inválido. El string describe el motivo
                                     del rechazo.
         """
-        if self.coords is None:
+        if self.coords_roi is None:
             return (False, "No se han definido coordenadas.")
 
-        real_x, real_y, real_w, real_h = self.coords
-        img_h, img_w = original_shape
-
-        # 1. Calcular coordenadas de la caja dibujada (esquinas opuestas)
-        draw_x1, draw_y1 = real_x, real_y
-        draw_x2, draw_y2 = real_x + real_w, real_y + real_h
-
-        # 2. Calcular la intersección (Solo lo que cae dentro de la imagen)
-        # Si la intersección es negativa, significa que está totalmente fuera.
-        inter_x1 = max(0, draw_x1)
-        inter_y1 = max(0, draw_y1)
-        inter_x2 = min(img_w, draw_x2)
-        inter_y2 = min(img_h, draw_y2)
-
-        # 3. Calcular dimensiones reales dentro de la imagen
-        true_w = inter_x2 - inter_x1
-        true_h = inter_y2 - inter_y1
-
         # --- VALIDACIONES ---
-
         # A. Verificar si hay solapamiento
-        if true_w <= 0 or true_h <= 0:
+        if self.coords_roi[2] <= 0 or self.coords_roi[3] <= 0:
             return False, "El área seleccionada está completamente fuera de la imagen."
 
-        # B. Verificar pérdida por desborde por lado
-        overflow_left   = max(0, -draw_x1)          # píxeles fuera por la izquierda
-        overflow_top    = max(0, -draw_y1)           # píxeles fuera por arriba
-        overflow_right  = max(0, draw_x2 - img_w)   # píxeles fuera por la derecha
-        overflow_bottom = max(0, draw_y2 - img_h)   # píxeles fuera por abajo
+        # B. Verificar perdida por desborde por lado
+        exceeded = self._calcular_overflow(shape)
+        if exceeded:
+            lados = ", ".join(exceeded)
+            return False, f"La selección se sale demasiado por: {lados}."
+
+        if self.area_km2 < min_area_km2:
+            return False, f"Área útil insuficiente: {self.area_km2:.2f} km²"
+
+        return True, f"{self.area_km2:.2f}"
+    
+    def _calcular_overflow(self, shape, tolerance= 512) -> tuple [bool, str]:
+        roi_x, roi_y, roi_w, roi_h = self.coords_roi
+        img_h, img_w = shape
+
+        overflow_left   = max(0, -roi_x)          # píxeles fuera por la izquierda
+        overflow_top    = max(0, -roi_y)           # píxeles fuera por arriba
+        overflow_right  = max(0, roi_x + roi_w - img_w)   # píxeles fuera por la derecha
+        overflow_bottom = max(0, roi_y + roi_h - img_h)   # píxeles fuera por abajo
 
         exceeded = []
         if overflow_left   > tolerance: exceeded.append(f"izquierda ({overflow_left}px)")
@@ -201,21 +299,5 @@ class ROIManager:
         if overflow_right  > tolerance: exceeded.append(f"derecha ({overflow_right}px)")
         if overflow_bottom > tolerance: exceeded.append(f"abajo ({overflow_bottom}px)")
 
-        if exceeded:
-            lados = ", ".join(exceeded)
-            return False, f"La selección se sale demasiado por: {lados}."
-
-        # C. Validar área mínima con los píxeles REALES (intersección)
-        res_x = abs(transform.a)
-        res_y = abs(transform.e)
-
-        area_m2 = true_w * true_h * (res_x * res_y)
-        self.area_km2 = area_m2 / 1_000_000 
-
-        if self.area_km2 < min_area_km2:
-            return False, f"Área útil insuficiente: {self.area_km2:.2f} km²"
-
-        # Guardamos las coordenadas recortadas (clipping) para que el Crop sea seguro
-        self.coords = (inter_x1, inter_y1, true_w, true_h)
-
-        return True, f"{self.area_km2:.2f}"
+        return exceeded
+    

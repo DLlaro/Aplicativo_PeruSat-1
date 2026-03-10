@@ -1,7 +1,7 @@
 # mouse_handler.py
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from logic.utils import cursor_to_coords, rectangle_to_coords
+from logic.utils import cursor_to_coords
 from constants import PIXEL_SIZE_PERU_SAT
 
 if TYPE_CHECKING:
@@ -47,7 +47,7 @@ class MouseHandler:
 
             # 3. Conversión Geométrica (Usando tu lógica)
             # Devuelve (X_GEO, Y_GEO) -> invierte y devuelve (Lat(y), Lon(x))
-            x_geo, y_geo, lat, lon  = cursor_to_coords(x_px, y_px, self.mw.loader.scale_factor, self.mw.loader.transform, self.mw.loader.crs)
+            utm_x, utm_y, lat, lon  = cursor_to_coords(x_px, y_px, self.mw.loader.scale_factor, self.mw.loader.transform, self.mw.loader.crs)
             
             # --- MEJORA: GUARDAR DATOS CRUDOS ---
             # Guardamos esto para que la función de COPIAR (Ctrl+C) lo use directo
@@ -58,7 +58,7 @@ class MouseHandler:
             self.mw.keyboard_handler.update_coords(lat, lon)
 
             # Update UI through status_mgr
-            self.mw.status_mgr.update_coords(x_geo, y_geo, lat, lon)
+            self.mw.status_mgr.update_coords(utm_x, utm_y, lat, lon)
 
         except Exception as e:
             # Es útil ver el error en la consola si estás desarrollando
@@ -90,14 +90,21 @@ class MouseHandler:
             dy = abs(end[-2] - start[-2])/self.mw.loader.scale_factor   # height in pixels
             dx = abs(end[-1] - start[-1])/self.mw.loader.scale_factor   # width in pixels
             
-            area_m2 = dx * dy * (PIXEL_SIZE_PERU_SAT ** 2)  # use real pixel size
+            dx = dx * abs(self.mw.loader.transform.a)
+            dy = dy * abs(self.mw.loader.transform.e)
+
+
+            area_m2 = dx * dy  # use real pixel size
             area_km2 = area_m2 / 1_000_000
             
-            #Update a label in your widget instead of statusBar()
-            self.mw.status_mgr.update_roi_area(dx, dy, area_km2)
+            if self.mw.roi_manager.layer.mode == "add_rectangle":
+                self.mw.status_mgr.update_rectangle_roi_area(dx, dy, area_km2)
             yield
 
         # ← everything below runs on RELEASE
-        self.mw.roi_manager.coords = rectangle_to_coords(self.mw.roi_manager.layer, scale_factor= self.mw.loader.scale_factor)
+        ## Toma las coordenadas reales crudas del dibujo
+        #print("entra dibujando el poligono")
+        self.mw.roi_manager.roi_to_coords(self.mw.loader)  # esto actualiza self.mw.roi_manager.coords_roi con las coordenadas reales del ROI
+
         release_pos = event.position
         #self.roi_manager.on_drag_end(release_pos)    # adapt to your API

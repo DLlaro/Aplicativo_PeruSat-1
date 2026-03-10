@@ -5,13 +5,13 @@ class StatusBarManager:
         self.bar = status_bar
         self.lbl_coords = QLabel("Coords: - , -")
         self.lbl_coords_lat_lon = QLabel(" - , -")
-        self.lbl_epsg = QLabel("EPSG: -")
+        self.lbl_epsg = QLabel("<b>EPSG: -</b>")
         self.lbl_escala = QLabel("Escala: 1 : -")
 
         self.progressLabel = QLabel("")
-        self.progress = QProgressBar()
-        self.progress.setMaximumHeight(15)
-        self.progress.setMaximumWidth(150)
+        self.progress = QProgressBar(objectName="status_progress")
+        self.progress.setMaximumHeight(25)
+        self.progress.setMaximumWidth(200)
 
         self._setup()
 
@@ -38,7 +38,7 @@ class StatusBarManager:
         self.lbl_escala.setText(f"Escala: 1 : {escala}")
 
 
-    def update_roi_area(self, dx, dy, area_km2):
+    def update_rectangle_roi_area(self, dx, dy, area_km2):
         self.lbl_coords.setText(f"ROI - Ancho: {dx:.1f} x Alto: {dy:.1f} m | Área: {area_km2:.4f} km²")
 
     def show_message(self, msg, timeout=0):

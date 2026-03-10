@@ -46,7 +46,9 @@ def predict_tiles_multiclase(
 
         try:
             with rasterio.open(image_path) as src:
-                img = src.read().astype(np.float32)
+                img = src.read([1,2,3]).astype(np.float32)
+                valid_mask = src.dataset_mask() > 0         # (H,W) boolean
+
                 meta = src.meta.copy()
 
             img_rgb = img[:3] / 255.0
@@ -62,6 +64,8 @@ def predict_tiles_multiclase(
                     mask_t = torch.argmax(probs, dim=1).squeeze(0).to(torch.uint8)
 
                 mask_class = mask_t.cpu().numpy().astype(np.uint8)
+                pred_masked = mask_class.copy()
+                pred_masked[~valid_mask] = 0
 
             meta.update(
                 {
@@ -74,7 +78,7 @@ def predict_tiles_multiclase(
             )
 
             with rasterio.open(output_path, "w", **meta) as dst:
-                dst.write(mask_class, 1)
+                dst.write(pred_masked, 1)
 
             tile_count += 1
             if progress_callback:

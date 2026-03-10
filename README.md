@@ -13,7 +13,7 @@ pip install "napari[all]"
 ```
 
 ```bash
-pip install lightning rasterio pyproj shapely geopandas albumentations matplotlib tqdm
+pip install lightning rasterio pyproj shapely geopandas albumentations matplotlib tqdm PySide6
 ```
 
 ```bash
