@@ -2,7 +2,7 @@
 
 # Satellite specs
 PIXEL_SIZE_PERU_SAT= 0.7  # PeruSat-1 native resolution in meters
-DEFAULT_SCALE_FACTOR = 50
+DEFAULT_SCALED_FACTOR = 50
 
 # UI defaults
 DEFAULT_WINDOW_WIDTH = 1200

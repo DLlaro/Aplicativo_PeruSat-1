@@ -7,6 +7,7 @@ class Strings:
     #ROI
     MSG_ROI_ACTIVE_RECT = "Modo ROI: Rectangulo activo, arrastre para crear poligono"
     MSG_ROI_ACTIVE_POLY = "Modo ROI: Poligono activo, presione enter para crear poligono"
+    MSG_ROI_ACTIVE_ENTIRE_IMAGE = "Imagen Total seleccionadad como ROI"
     MSG_ROI_READY = "ROI detectado listo para analizar"
     MSG_ROI_INVALIDO = "ROI invalido - ajusta la seleccion"
 

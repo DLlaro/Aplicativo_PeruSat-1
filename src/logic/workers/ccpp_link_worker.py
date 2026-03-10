@@ -3,7 +3,6 @@ from PySide6.QtCore import Signal
 from logic.prediccion.vincular_ccpp import link_buildings_to_ccpp
 from logic.workers.base_worker import BaseWorker
 
-
 class CCPPLinkWorker(BaseWorker):
     finished = Signal(object)
 

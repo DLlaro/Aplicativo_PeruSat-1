@@ -5,10 +5,9 @@ from logic.image_loader import SatelliteLoader
 class LoadImageWorker(BaseWorker):
     finished = Signal(object)
 
-    def __init__(self, loader: SatelliteLoader, escala: int):
+    def __init__(self, loader: SatelliteLoader):
         super().__init__()
         self.loader = loader
-        self.escala = escala
 
     def run(self):
         """
@@ -26,7 +25,6 @@ class LoadImageWorker(BaseWorker):
         """
         try:
             img = self.loader.get_preview(
-                escala_input=self.escala,
                 progress_callback=self.progress
             )
             self.finished.emit(img)

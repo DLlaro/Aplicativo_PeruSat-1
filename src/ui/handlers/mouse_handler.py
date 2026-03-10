@@ -12,12 +12,12 @@ class MouseHandler:
         self.mw = main_window
 
     def connect(self):
-        self.mw.viewer_model.mouse_move_callbacks.append(self.on_mouse_move)
-        self.mw.viewer_model.mouse_drag_callbacks.append(self.on_drag)
+        self.mw.viewer_model.model.mouse_move_callbacks.append(self.on_mouse_move)
+        self.mw.viewer_model.model.mouse_drag_callbacks.append(self.on_drag)
 
     def disconnect(self):
-        self.mw.viewer_model.mouse_move_callbacks.remove(self.on_mouse_move)
-        self.mw.viewer_model.mouse_drag_callbacks.remove(self.on_drag)
+        self.mw.viewer_model.model.mouse_move_callbacks.remove(self.on_mouse_move)
+        self.mw.viewer_model.model.mouse_drag_callbacks.remove(self.on_drag)
 
     def on_mouse_move(self, viewer, event):
         self._actualizar_coordenadas(viewer, event)
@@ -31,14 +31,14 @@ class MouseHandler:
         Calcula coordenadas reales y actualiza la UI.
         """
         # 1. Validación básica
-        if not self.mw.viewer_model.layers:
+        if not self.mw.viewer_model.model.layers:
             self.mw.status_mgr.lbl_coords.setText("Coords: - , -")
             return
             
         try:
             # 2. Obtener posición del cursor (Napari usa orden Y, X)
             # cursor.position devuelve una tupla de floats
-            cursor_pos = self.mw.viewer_model.cursor.position
+            cursor_pos = self.mw.viewer_model.model.cursor.position
             
             # Napari a veces devuelve 3 coordenadas si hay capas 3D (Z, Y, X)
             # Tomamos las últimas dos que suelen ser Y, X
@@ -47,7 +47,7 @@ class MouseHandler:
 
             # 3. Conversión Geométrica (Usando tu lógica)
             # Devuelve (X_GEO, Y_GEO) -> invierte y devuelve (Lat(y), Lon(x))
-            utm_x, utm_y, lat, lon  = cursor_to_coords(x_px, y_px, self.mw.loader.scale_factor, self.mw.loader.transform, self.mw.loader.crs)
+            utm_x, utm_y, lat, lon  = cursor_to_coords(x_px, y_px, self.mw.loader.scaled_factor, self.mw.loader.transform, self.mw.loader.crs)
             
             # --- MEJORA: GUARDAR DATOS CRUDOS ---
             # Guardamos esto para que la función de COPIAR (Ctrl+C) lo use directo
@@ -87,8 +87,8 @@ class MouseHandler:
             start = press_pos          # defined before yield (on press)
             end = move_pos
             
-            dy = abs(end[-2] - start[-2])/self.mw.loader.scale_factor   # height in pixels
-            dx = abs(end[-1] - start[-1])/self.mw.loader.scale_factor   # width in pixels
+            dy = abs(end[-2] - start[-2])/self.mw.loader.scaled_factor   # height in pixels
+            dx = abs(end[-1] - start[-1])/self.mw.loader.scaled_factor   # width in pixels
             
             dx = dx * abs(self.mw.loader.transform.a)
             dy = dy * abs(self.mw.loader.transform.e)
@@ -97,14 +97,14 @@ class MouseHandler:
             area_m2 = dx * dy  # use real pixel size
             area_km2 = area_m2 / 1_000_000
             
-            if self.mw.roi_manager.layer.mode == "add_rectangle":
+            if self.mw.viewer_model._layers["ROI"].mode == "add_rectangle":
                 self.mw.status_mgr.update_rectangle_roi_area(dx, dy, area_km2)
             yield
 
         # ← everything below runs on RELEASE
         ## Toma las coordenadas reales crudas del dibujo
         #print("entra dibujando el poligono")
-        self.mw.roi_manager.roi_to_coords(self.mw.loader)  # esto actualiza self.mw.roi_manager.coords_roi con las coordenadas reales del ROI
+        self.mw.roi_manager.set_roi_to_coords(self.mw.viewer_model._layers["ROI"].data)  # esto actualiza self.mw.roi_manager.coords_roi con las coordenadas reales del ROI
 
         release_pos = event.position
         #self.roi_manager.on_drag_end(release_pos)    # adapt to your API

@@ -11,7 +11,6 @@ from logic.image_loader import SatelliteLoader
 import geopandas as gpd
 
 from skimage.draw import polygon
-from typing import Optional, TypeAlias, Callable
 
 def roi_to_tiles(
     coords: tuple,

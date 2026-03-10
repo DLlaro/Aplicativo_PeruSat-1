@@ -35,7 +35,7 @@ class LoadDialog(QDialog):
         scale_layout.addWidget(QLabel("Calidad de la imagen:"))
         
         self.spin_escala = QSpinBox()
-        self.spin_escala.setRange(10, self.max_scale )  # Default range without GPU
+        self.spin_escala.setRange(5, self.max_scale )  # Default range without GPU
         self.spin_escala.setSingleStep(5)
         self.spin_escala.setSuffix("%")
         self.spin_escala.setValue(self.max_scale/2)
@@ -128,16 +128,14 @@ class LoadDialog(QDialog):
         return frame        
     
     def _unlock_scale(self):       
-        self.spin_escala.setRange(10, self.max_scale)
+        self.spin_escala.setRange(5, self.max_scale)
 
     def _lock_scale(self):
         current = self.spin_escala.value()
-        self.spin_escala.setRange(10, self.max_scale)
+        self.spin_escala.setRange(5, self.max_scale)
         
         if current < self.max_scale:
             self.spin_escala.setValue(self.max_scale/2)
-        
-        self.spin_escala.setToolTip("10-50%: Sin GPU")
 
     def _on_spin_changed(self):
         self._update_dimensions()

@@ -35,7 +35,7 @@ class KeyboardHandler:
             return
         
         # transfiere responsabilidad al Manager
-        coords = roi.on_polygon_confirm(self.mw.loader.scale_factor)
+        coords = roi.on_polygon_confirm(self.mw.loader.scaled_factor)
 
         if coords is None:
             self.mw.statusBar().showMessage("ROI inválido: Se requieren al menos 3 puntos.", 2000)

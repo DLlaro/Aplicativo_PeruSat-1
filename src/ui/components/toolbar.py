@@ -36,9 +36,16 @@ class AppToolbar(QToolBar):
         )
         self.action_roi_poly.setCheckable(True)
 
+        self.action_roi_entire_image = QAction(
+            QIcon(f"{settings.base_path}/assets/icons/polygon.svg"),
+            "Toda la imagen",
+            self
+        )
+
         self.menu_roi = QMenu(self)
         self.menu_roi.addAction(self.action_roi_rect)
         self.menu_roi.addAction(self.action_roi_poly)
+        self.menu_roi.addAction(self.action_roi_entire_image)
 
         self.roi_btn = QToolButton()
         self.roi_btn.setIcon(QIcon(f"{settings.base_path}/assets/icons/draw_roi.svg"))
@@ -72,6 +79,7 @@ class AppToolbar(QToolBar):
             "Configuracion",
             self,
         )
+        
         self.action_config.setEnabled(True)
 
     def _setup(self):
@@ -89,27 +97,41 @@ class AppToolbar(QToolBar):
 
     def set_roi_opt_checked(self, activo: bool, option = "add_rectangle"):
         if activo:
-            print(f"Activando modo ROI: {option}")
             if option == "add_rectangle":
                 self.action_roi_rect.setChecked(activo)
+                self.action_roi_rect.setEnabled(activo)
                 self.action_roi_poly.setChecked(not activo)
                 self.action_roi_poly.setEnabled(not activo)
+                self.action_roi_entire_image.setChecked(not activo)
+                self.action_roi_entire_image.setEnabled(not activo)
             elif option == "add_polygon":
-                self.action_roi_rect.setChecked(not activo)
                 self.action_roi_poly.setChecked(activo)
                 self.action_roi_poly.setEnabled(activo)
+                self.action_roi_rect.setChecked(not activo)
+                self.action_roi_rect.setEnabled(not activo)
+                self.action_roi_entire_image.setChecked(not activo)
+                self.action_roi_entire_image.setEnabled(not activo)
+            elif option == "add_entire_image":
+                self.action_roi_entire_image.setChecked(activo)
+                self.action_roi_entire_image.setEnabled(activo)
+                self.action_roi_poly.setChecked(not activo)
+                self.action_roi_poly.setEnabled(not activo)
+                self.action_roi_rect.setChecked(not activo)
+                self.action_roi_rect.setEnabled(not activo)
         else:
-            print("Desactivando modo ROI")
             self.action_roi_rect.setChecked(False)
             self.action_roi_rect.setEnabled(True)
             self.action_roi_poly.setChecked(False)
             self.action_roi_poly.setEnabled(True)
+            self.action_roi_entire_image.setChecked(False)
+            self.action_roi_entire_image.setEnabled(True)
             
 
     def set_roi_enabled(self, activo: bool):
         self.roi_btn.setEnabled(activo)
 
     def set_analyze_enabled(self, enabled: bool):
+        self._analize_enabled_requested = enabled
         self.action_analyze.setEnabled(enabled)
 
     def set_open_enabled(self, enabled: bool):
@@ -126,14 +148,14 @@ class AppToolbar(QToolBar):
         self._link_enabled_requested = enabled
         self.action_link_ccpp.setEnabled(enabled)
 
-    def set_all_enabled(self, enabled: bool):
+    def ready_ui(self, enabled: bool):
         """
         Enable/disable all toolbar actions.
         Respeta el estado interno del boton de vinculacion.
         """
         self.action_open.setEnabled(enabled)
         self.roi_btn.setEnabled(enabled)
-        self.action_analyze.setEnabled(enabled)
+        self.action_analyze.setEnabled(enabled and self._analize_enabled_requested)
         self.action_config.setEnabled(enabled)
         self.action_reset.setEnabled(enabled and self._reset_enabled_requested)
         self.action_link_ccpp.setEnabled(enabled and self._link_enabled_requested)

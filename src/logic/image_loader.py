@@ -35,14 +35,14 @@ class SatelliteLoader:
             Lista de los valores del percentil 2 del conjunto de train usados para normalizar
         """
         self.path: str = ""
-        self.original_shape: Optional[Tuple[int, int]] = None  # (H, W)
-        self.scaled_shape: Optional[Tuple[int, int]] = None
-        self.scale_factor: float = 1.0
+        self._original_shape: Optional[Tuple[int, int]]  # (H, W)
+        self.scaled_shape: Optional[Tuple[int, int]]
+        self._scaled_factor: float = 1.0
         self.transform : Affine
         self.crs : CRS
         self.bands: list
-        self.global_lo: Optional[NDArray[float32]] = None
-        self.global_hi: Optional[NDArray[float32]] = None
+        self.global_lo: Optional[NDArray[float32]]
+        self.global_hi: Optional[NDArray[float32]]
     
     def load_metadata(self, path: str) -> Tuple[int, int]:
         """
@@ -74,12 +74,13 @@ class SatelliteLoader:
                     f"Resolución espacial distinta de 0.7m/px"
                     f"\n(X = {res_x}, Y = {res_y})"
                 )
-            return self.original_shape
+            return self._original_shape
 
         except rasterio.errors.RasterioIOError as e:
             raise RuntimeError(f"No se pudo abrir el raster: {e}") from e
-        
-    def get_original_shape(self) -> Tuple[int, int]:
+    
+    @property
+    def original_shape(self) -> Tuple[int, int]:
         """
         Devuelve el shape original del raster (H x W)
 
@@ -88,10 +89,25 @@ class SatelliteLoader:
         ValueError
             Si aún no se ha cargado metadata.
         """
-        if self.original_shape is None:
+        if self._original_shape is None:
             raise ValueError("No se ha cargado metadata todavía.")
 
-        return self.original_shape
+        return self._original_shape
+
+    @original_shape.setter
+    def original_shape(self, value: Tuple[int, int]) -> None:
+        self._original_shape = value
+
+    @property
+    def scaled_factor(self) -> float:
+        """
+        Devuelve el factor de escala de 0 a 1 (input del usuario / 100)
+        """
+        return self._scaled_factor
+    
+    @scaled_factor.setter
+    def scaled_factor(self, value: float) -> None:
+        self._scaled_factor = value
     
     def get_res_px_per_side(self) -> tuple:
         """
@@ -119,7 +135,6 @@ class SatelliteLoader:
         return 0, 0, h, w # se resta uno para evitar index out of bounds
 
     def get_preview(self,
-                    escala_input: int = 50,
                     progress_callback = None) -> Optional[NDArray[float32]]:
         """
         Lee una imagen reescalada (downsampled) del raster para una visualización rápida, 
@@ -142,8 +157,7 @@ class SatelliteLoader:
         """
         try:
             with rasterio.open(self.path) as src:    
-                self.scale_factor = escala_input /100
-                self.scaled_shape = int(src.height * self.scale_factor), int(src.width * self.scale_factor)
+                self.scaled_shape = int(src.height * self._scaled_factor), int(src.width * self._scaled_factor)
                 
                 if progress_callback:
                     progress_callback(10, msg = "Reescalando...", infinite = True)

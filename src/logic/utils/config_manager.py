@@ -116,11 +116,11 @@ class AppConfig:
 
     @property
     def logo_path(self):
-        return os.path.join(self.internal_path, "assets", "inei_logo.ico")
+        return os.path.join(self.internal_path, "assets", "logos", "inei_logo.ico")
     
     @property
     def logo_path_png(self):
-        return os.path.join(self.internal_path, "assets", "inei_logo.png")
+        return os.path.join(self.internal_path, "assets", "logos","inei_logo.png")
     
     @property
     def qss_path(self):

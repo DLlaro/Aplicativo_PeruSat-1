@@ -2,7 +2,6 @@ import gc
 import os
 
 import numpy as np
-from napari.components import ViewerModel
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QDialog, QFileDialog, QHBoxLayout, QMainWindow, QMessageBox, QWidget
 
@@ -17,6 +16,7 @@ from constants import (
 from assets.strings import Strings as S
 
 from logic.image_loader import SatelliteLoader
+from ui.viewer_manager import ViewerManager
 from logic.modelo.model_utils import cargar_recargar_modelo
 from logic.utils.config_manager import settings
 from logic.workers import CCPPLinkWorker, LoadImageWorker, MetadataWorker, TilingWorker
@@ -24,6 +24,10 @@ from ui.components import AppToolbar, SideBarManager, StatusBarManager, ViewerPa
 from ui.dialogs import AnalyzeDialog, LoadDialog, SettingsDialog
 from ui.handlers import KeyboardHandler, MouseHandler
 from ui.roi_manager import ROIManager
+from constants import (ROI_EDGE_COLOR, 
+                       ROI_EDGE_WIDTH,
+                       ROI_FACE_COLOR
+                       )
 
 from logic.prediccion import load_vector_to_napari
 
@@ -35,9 +39,19 @@ class MainWindow(QMainWindow):
         self.resize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
         self.setWindowIcon(QIcon(settings.logo_path))
 
-        self.loader = SatelliteLoader()
-        self.viewer_model = ViewerModel()
-        self.viewer_model.theme = 'dark'
+        self._loader = SatelliteLoader()
+
+        self.roi_manager = ROIManager(
+            onViewerCallback=self._on_viewer_roi,
+            onToggleCallback=self.toggle_check_roi,
+            onDataChanged=self.existe_poligono,
+        )
+
+        self.viewer_model = ViewerManager()
+
+        self.viewer_model.preparar_capa("ROI",
+                                        (ROI_EDGE_COLOR, ROI_FACE_COLOR, ROI_EDGE_WIDTH),
+                                        on_data_changed= self.roi_manager._on_data_changed)
 
         self.container = QWidget()
         self.main_layout = QHBoxLayout(self.container)
@@ -45,7 +59,7 @@ class MainWindow(QMainWindow):
         self.main_layout.setSpacing(0)
         self.setCentralWidget(self.container)
 
-        self.viewer_panel = ViewerPanel(self.viewer_model)
+        self.viewer_panel = ViewerPanel(self.viewer_model.model)
         self.toolbar = AppToolbar(parent=self)
         self.addToolBar(self.toolbar)
         self.status_mgr = StatusBarManager(self.statusBar())
@@ -55,12 +69,6 @@ class MainWindow(QMainWindow):
         self.main_layout.addWidget(self.sidebar_mgr.sidebar)
         self.main_layout.setStretch(0, 1)
         self.main_layout.setStretch(1, 0)
-
-        self.roi_manager = ROIManager(
-            self.viewer_model,
-            onToggleCallback=self.toggle_check_roi,
-            onDataChanged=self.existe_poligono,
-        )
 
         self.mouse_handler = MouseHandler(self)
         self.keyboard_handler = KeyboardHandler(self)
@@ -78,6 +86,14 @@ class MainWindow(QMainWindow):
         self.modelo_cargado = exito
         self.status_mgr.show_message(msg, TIMEOUT_LONG if exito else TIMEOUT_MEDIUM)
 
+    def _on_viewer_roi(self, action: str, mode: str = None, initial_data=None):
+        if action == "activar":
+            self.viewer_model.activar_capa("ROI", mode, initial_data)
+        elif action == "desactivar":
+            self.viewer_model.desactivar_capa("ROI")
+        elif action == "limpiar":         # ← nuevo callback si lo necesitas
+            self.viewer_model.limpiar_capa("ROI")
+
     def toggle_check_roi(self, is_active: bool, mode: str = "pan_zoom") -> None:
         self.toolbar.set_roi_opt_checked(is_active, option=mode)
         if is_active:
@@ -85,10 +101,12 @@ class MainWindow(QMainWindow):
                 self.status_mgr.show_message(S.MSG_ROI_ACTIVE_RECT, TIMEOUT_MEDIUM)
             elif mode == "add_polygon":
                 self.status_mgr.show_message(S.MSG_ROI_ACTIVE_POLY, TIMEOUT_MEDIUM)
+            elif mode == "add_entire_image":
+                self.status_mgr.show_message(S.MSG_ROI_ACTIVE_ENTIRE_IMAGE, TIMEOUT_MEDIUM)
             self.roi_manager.polygon_coords = None  # resetear coords del polígono al activar modo
 
     def existe_poligono(self, tiene_datos: bool) -> None:
-        self.toolbar.set_analyze_enabled(self.archivo_cargado)
+        self.toolbar.set_analyze_enabled(self.archivo_cargado)# Se habilite si hay archivo cargado (sin necesarimente existir un ROI)
         self.toolbar.set_reset_enabled(tiene_datos)
         if tiene_datos:
             self.toolbar.set_link_enabled(self.last_buildings_gpkg_path is not None and os.path.exists(self.last_buildings_gpkg_path))
@@ -98,6 +116,7 @@ class MainWindow(QMainWindow):
         self.toolbar.action_open.triggered.connect(self.abrir_archivo)
         self.toolbar.action_roi_rect.triggered.connect(lambda: self.toggle_modo_roi(mode="add_rectangle"))
         self.toolbar.action_roi_poly.triggered.connect(lambda: self.toggle_modo_roi(mode="add_polygon"))
+        self.toolbar.action_roi_entire_image.triggered.connect(lambda: self.toggle_modo_roi(mode="add_entire_image"))
         self.toolbar.action_analyze.triggered.connect(self.analizar_imagen)
         self.toolbar.action_link_ccpp.triggered.connect(self.vincular_centros_poblados)
         self.toolbar.action_reset.triggered.connect(self.reset)
@@ -105,6 +124,16 @@ class MainWindow(QMainWindow):
         self.mouse_handler.connect()
         self.keyboard_handler.connect()
 
+    @property
+    def loader(self):
+        if self._loader is None:
+            print("Advertencia: La imagen aun no ha sido cargada.")
+        return self._loader
+    
+    @loader.setter
+    def loader(self, value):
+        self._loader = value
+    
     @property
     def archivo_cargado(self):
         return self._archivo_cargado
@@ -123,7 +152,7 @@ class MainWindow(QMainWindow):
 
         self.status_mgr.setEPSG(self.loader.crs)
         self.toolbar.set_open_enabled(True)
-        self.status_mgr.setEscala(f"{1/self.loader.scale_factor:.1f}")
+        self.status_mgr.setEscala(f"{1 / self.loader.scaled_factor:.1f}")
         self.status_mgr.hide_progress()
 
     @property
@@ -145,55 +174,62 @@ class MainWindow(QMainWindow):
             return
 
         self.workerMetadata = MetadataWorker(loader=self.loader, file_path=raster_path)
-        self.workerMetadata.finished.connect(lambda shape: self.mostrar_load_dialog(shape))
+        self.workerMetadata.finished.connect(lambda shape: self.mostrar_load_dialog())
         self.workerMetadata.error.connect(lambda msg: QMessageBox.critical(self, "Error", msg))
         self.workerMetadata.start()
 
-    def mostrar_load_dialog(self, shape: tuple) -> None:
-        dialog = LoadDialog(self, shape)
+    def mostrar_load_dialog(self) -> None:
+        dialog = LoadDialog(self, self.loader.original_shape)
+
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            escala = dialog.get_values()
+            self.loader.scaled_factor = dialog.get_values() / 100
             self.status_mgr.show_message(
-                f"Procesando imagen: {shape[1]} x {shape[0]} px a "
-                f"{shape[1]*(escala/100):.0f} x {shape[0]*(escala/100):.0f} px..."
+                f"Procesando imagen W: {self.loader.original_shape[1]} x H: {self.loader.original_shape[0]} px a "
+                f"W: {self.loader.original_shape[1] * self.loader.scaled_factor :.0f} x H: {self.loader.original_shape[0] * self.loader.scaled_factor :.0f} px..."
             )
-            self.cargar_en_visor(escala)
+            self.cargar_en_visor()
         else:
             print("Carga cancelada.")
 
-    def cargar_en_visor(self, input_escala) -> None:
+    def cargar_en_visor(self) -> None:
         self.archivo_cargado = False
         try:
             self.limpiar_visor()
             self.status_mgr.show_progress()
-
-            self.worker = LoadImageWorker(loader=self.loader, escala=input_escala)
+            self.worker = LoadImageWorker(loader=self.loader)
             self.worker.progress_update.connect(self.status_mgr.update_progress)
             self.worker.finished.connect(self.finalizar_carga_img)
             self.worker.error.connect(self._on_worker_error)
-            self.toolbar.set_all_enabled(False)
+            self.toolbar.ready_ui(False)
             self.worker.start()
 
         except Exception as e:
             print(f"Error UI: {e}", flush=True)
 
     def finalizar_carga_img(self, img_data) -> None:
-        self.viewer_model.add_image(img_data, name="Preview", contrast_limits=[0, 1])
-        self.status_mgr.show_message(S.MSG_IMAGEN_CARGADA, TIMEOUT_LONG)
-        self.viewer_model.reset_view()
-        self.archivo_cargado = True
-        self.viewer_panel.show_viewer()
-        self.toolbar.set_config_enabled(True)
-        self.toolbar.set_all_enabled(True)
-        #el roi esta en falso
-        print("Nueva imagen cargada correctamente.")
-
+        try:
+            self.roi_manager.loader = self.loader
+            self.viewer_model.model.add_image(img_data, name="Preview", contrast_limits=[0, 1])
+            self.status_mgr.show_message(S.MSG_IMAGEN_CARGADA, TIMEOUT_LONG)
+            self.viewer_model.model.reset_view()
+            self.archivo_cargado = True
+            self.viewer_panel.show_viewer()
+            print("Nueva imagen cargada correctamente.")
+        except Exception as e:
+            QMessageBox.warning(self, "Imagen inválida", f"{e}")
+            print(f"Error al añadir la imagen: {e}", flush = True)
+            return
+        finally:
+            self.toolbar.ready_ui(True)
+            self.status_mgr.hide_progress()
+        
     def limpiar_visor(self) -> None:
-        self.viewer_model.layers.clear()
+        self.viewer_model.model.layers.clear()
         self.roi_manager.limpiar()
         self.last_buildings_gpkg_path = None
         self.last_prediction_output_dir = None
         self.toolbar.set_link_enabled(False)
+        self.toolbar.set_analyze_enabled(False)
         self.sidebar_mgr.limpiar()
         gc.collect()
 
@@ -226,7 +262,7 @@ class MainWindow(QMainWindow):
 
             process_full = analyze_dlg.process_full_image
             if process_full:
-                h, w = self.loader.get_original_shape()
+                h, w = self.loader.original_shape()
                 self.roi_manager.coords_roi = (0, 0, w, h)
             else:
                 if not has_roi:
@@ -237,15 +273,14 @@ class MainWindow(QMainWindow):
                     )
                     return
                 es_valido, mensaje = self.roi_manager.validar_roi(
-                    min_area_km2=MIN_AREA_KM2,
-                    shape=self.loader.get_original_shape(),
+                    min_area_km2=MIN_AREA_KM2
                 )
                 if not es_valido and not self._handle_roi_invalido(mensaje):
                     return
                 #polygon = self.roi_manager.polygon
 
             self.status_mgr.show_progress()
-            self.toolbar.set_all_enabled(False)
+            self.toolbar.ready_ui(False)
 
             self.workerTiler = TilingWorker(loader = self.loader,
                                                 coords=self.roi_manager.coords_roi,
@@ -317,7 +352,7 @@ class MainWindow(QMainWindow):
             return
 
         self.status_mgr.show_progress()
-        self.toolbar.set_all_enabled(False)
+        self.toolbar.ready_ui(False)
         self.workerLink = CCPPLinkWorker(
             buildings_path=self.last_buildings_gpkg_path,
             ccpp_points_path=ccpp_path,
@@ -332,7 +367,7 @@ class MainWindow(QMainWindow):
 
     def _on_worker_error(self, msg: str) -> None:
         QMessageBox.critical(self, "Error", msg)
-        self.toolbar.set_all_enabled(True)
+        self.toolbar.ready_ui(True)
         self.status_mgr.hide_progress()
 
     def _add_shape_layer(self, layer_name: str, shape_data: dict) -> None:
@@ -346,7 +381,7 @@ class MainWindow(QMainWindow):
             kwargs["face_color"] = shape_data["face_color"]
         if "edge_color" in shape_data:
             kwargs["edge_color"] = shape_data["edge_color"]
-        self.viewer_model.add_shapes(shape_data.get("data", []), **kwargs)
+        self.viewer_model.model.add_shapes(shape_data.get("data", []), **kwargs)
 
     def _mostrar_resultado_analisis(self, result_payload: object) -> None:
         if isinstance(result_payload, dict) and "shape" in result_payload:
@@ -363,7 +398,7 @@ class MainWindow(QMainWindow):
             self.toolbar.set_link_enabled(True)
 
         QMessageBox.information(self, "Analisis completado", "Capa vectorial anadida con exito")
-        self.toolbar.set_all_enabled(True)
+        self.toolbar.ready_ui(True)
         self.status_mgr.hide_progress()
 
     def _mostrar_resultado_vinculacion(self, result_payload: dict) -> None:
@@ -396,7 +431,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo mostrar la vinculacion:\n{str(e)}")
         finally:
-            self.toolbar.set_all_enabled(True)
+            self.toolbar.ready_ui(True)
             self.status_mgr.hide_progress()
 
     def reset(self) -> None:

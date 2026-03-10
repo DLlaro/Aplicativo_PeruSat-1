@@ -103,7 +103,6 @@ def _sample_boundary_points(geom, step: float = 10.0) -> list[tuple[float, float
             pts.append((p.x, p.y))
     return pts
 
-
 def _aoi_from_valid_pixels(
     tif_path: str,
     coords: tuple,
@@ -113,8 +112,9 @@ def _aoi_from_valid_pixels(
     simplify_tol: float = 10.0,
     min_area_px: int = 300,
 ) -> gpd.GeoDataFrame:
-    print(coords)
     downsample = max(1, int(downsample))
+
+    _, _, w, h = coords
 
     with rasterio.open(tif_path) as src:
         if src.crs is None:
@@ -123,11 +123,10 @@ def _aoi_from_valid_pixels(
         if band_indexes is None:
             band_indexes = list(range(1, src.count + 1))
 
-        out_h = max(1, int(math.ceil(coords[2] / downsample)))
-        out_w = max(1, int(math.ceil(coords[3] / downsample)))
+        out_h = max(1, int(math.ceil(h / downsample)))
+        out_w = max(1, int(math.ceil(w / downsample)))
 
-        x, y, w, h = coords
-        window = Window(x, y, w, h)
+        window = Window(*coords)
 
         data = src.read(
             band_indexes,
@@ -137,8 +136,8 @@ def _aoi_from_valid_pixels(
         )
         transform = src.window_transform(window)
 
-        scale_x = coords[2] / out_w
-        scale_y = coords[3] / out_h
+        scale_x = w / out_w
+        scale_y = h / out_h
         transform = transform * Affine.scale(scale_x, scale_y)
         crs = src.crs
         nodata = 0
@@ -168,7 +167,6 @@ def _aoi_from_valid_pixels(
         raise RuntimeError("El AOI resultante quedo vacio tras simplificacion.")
 
     return gpd.GeoDataFrame({"id": [1]}, geometry=[aoi], crs=crs)
-
 
 def _nearest_with_strtree(
     buildings_dist: gpd.GeoDataFrame,
@@ -239,7 +237,6 @@ def _nearest_with_strtree(
         )
 
     return pd.DataFrame(rows)
-
 
 def _nearest_with_sjoin(
     buildings_dist: gpd.GeoDataFrame,

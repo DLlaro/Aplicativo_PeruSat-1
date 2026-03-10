@@ -53,14 +53,14 @@ def load_vector_to_napari(
 
     if loader is None:
         raise ValueError("loader es requerido para transformar la capa al visor.")
-    if loader.transform is None or loader.scale_factor is None:
+    if loader.transform is None or loader.scaled_factor is None:
         raise ValueError("loader no tiene transform/scale_factor configurados.")
 
     if loader.crs is not None and gdf.crs is not None and str(gdf.crs) != str(loader.crs):
         gdf = gdf.to_crs(loader.crs)
 
     aff_original = loader.transform
-    factor = 1.0 / loader.scale_factor
+    factor = 1.0 / loader.scaled_factor
     aff_scaled = aff_original * Affine.scale(factor, factor)
     inv_transform = ~aff_scaled
 
