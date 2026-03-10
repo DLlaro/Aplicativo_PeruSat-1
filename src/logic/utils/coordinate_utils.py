@@ -1,7 +1,7 @@
 from pyproj import Transformer
 import numpy as np
 
-def cursor_to_coords(x_napari: float, y_napari: float, scale_factor: float, transform, crs) -> tuple[float, float, float, float]:
+def cursor_to_coords(x_napari: float, y_napari: float, scaled_factor: float, transform, crs) -> tuple[float, float, float, float]:
         """
         Convierte coordenadas del cursor en Napari a coordenadas reales UTM y Lat/Lon.
 
@@ -12,8 +12,8 @@ def cursor_to_coords(x_napari: float, y_napari: float, scale_factor: float, tran
         Returns:
             tuple: (real_x, real_y, lat, lon)
         """
-        real_x = x_napari / scale_factor
-        real_y = y_napari / scale_factor
+        real_x = x_napari / scaled_factor
+        real_y = y_napari / scaled_factor
 
         utm_x, utm_y = transform * (real_x, real_y)
 
