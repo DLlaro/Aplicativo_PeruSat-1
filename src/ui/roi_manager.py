@@ -84,15 +84,16 @@ class ROIManager:
             self._desactivar_modo_dibujo()
 
     def _activar_modo_dibujo(self, mode:str) -> None:
-        if self.layer is None or 'ROI' not in self.viewer.layers:
-            self._preparar_capas()
+        if mode == "add_entire_image":
+            #napari acepta las coordenadas (y,x)
+            h, w = self.loader.scaled_shape
+            coords = [[(0,0), (h,0), (h,w), (0,w)]]
+            print(coords)
+            self.set_roi_to_coords(coords)
+            self.on_viewer_callback("activar", "add_rectangle", coords)
+        else:
+            self.on_viewer_callback("activar", mode)
 
-        self.layer.data = []
-
-        self.layer.visible = True
-        self.layer.mode = mode
-        self.viewer.cursor.style = 'crosshair'
-        self.viewer.layers.selection.active = self.layer
 
     def _desactivar_modo_dibujo(self) -> None:
         """Sale del modo de dibujo"""
@@ -102,8 +103,9 @@ class ROIManager:
     def _on_data_changed(self, event):
         if self.layer is None or self._updating:
             return
-        
-        if len(self.layer.data) > 1 and self.layer.mode == "add_rectangle":
+        layer = event.source  # ← viene del evento, no de self
+
+        if len(layer.data) > 1 and layer.mode == "add_rectangle":
             self._updating = True
             try:
                 self.layer.data = self.layer.data[-1:]
@@ -158,29 +160,63 @@ class ROIManager:
         self.coords_roi = None
         self.polygon_coords = None
 
-
         if self.on_data_changed_callback:
             self.on_data_changed_callback(False)
         if self.on_toggle_callback:
             self.on_toggle_callback(False)
-    
-    def tiene_datos(self) -> bool:
+        if self.on_viewer_callback:
+            self.on_viewer_callback("limpiar")  # ← le dice al viewer que limpie
+
+    def set_roi_to_coords(self, layer_data: list) -> None:
         """
-        Check si la capa tiene datos datos 
+        Extrae el bounding box del ultimo ROI dibujado en coordenadas de pixeles.
         
-        Return
-        ----------
-        :bool
-            - True → Existen datos en la capa
-            - False → No existen datos en la capa
+        Args
+        ----
+        layer_data: datos de la capa, shape (n_vertices, 2) → [y, x]
         """
-        return self.layer is not None and len(self.layer.data) > 0
-    
-    def roi_to_coords(self, loader: SatelliteLoader) -> tuple[float, float, float, float]:
+        if layer_data is None or len(layer_data) == 0:
+            return
+
+        shape_data = layer_data[-1]
+        shape_data = np.array(shape_data)
+
+        # shape_data ahora debe ser (n_vertices,2)
+        y_coords = shape_data[:, 0]
+        x_coords = shape_data[:, 1]
+
+        sf = self.loader.scaled_factor
+
+        raw_coords = (
+            int(x_coords.min() / sf),
+            int(y_coords.min() / sf),
+            int((x_coords.max() - x_coords.min()) / sf),
+            int((y_coords.max() - y_coords.min()) / sf),
+        )
+
+        self._update_valid_coords(raw_coords)
+
+    def _update_valid_coords(
+        self,
+        raw_coords: tuple[int, int, int, int],
+    ) -> None:
+        """Clips coords to image bounds, updates state, returns clipped coords or None."""
+        clipped = self._clip_coords_to_image(raw_coords)
+        if clipped is None:
+            self._coords_roi = None
+            self.area_km2 = None
+            return None
+
+        self._coords_roi = clipped
+        self.area_km2 = get_rectangle_area_km2((clipped[3], clipped[2]), self.loader.transform)
+
+    def _clip_coords_to_image(
+        self,
+        raw_coords: tuple[int, int, int, int],
+    ) -> tuple[int, int, int, int] | None:
         """
-        Extrae las coordenadas y dimensiones reales del ROI si es un rectangulo o
-        el bounding box si es un poligono
-        
+        Clips a (x, y, w, h) rect to image bounds.
+
         Args:
             layer: Capa dibujada por el usuario en el visor
                     

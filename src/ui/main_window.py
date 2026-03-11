@@ -34,17 +34,22 @@ class MainWindow(QMainWindow):
         self.resize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT)
         self.setWindowIcon(QIcon(settings.logo_path))
 
-        self.loader = SatelliteLoader()
-        self.viewer_model = ViewerModel()
-        self.viewer_model.theme = 'dark'
+        self._loader = SatelliteLoader()
 
+        self.roi_manager = ROIManager(
+            onViewerCallback=self._on_viewer_roi,
+            onToggleCallback=self.toggle_check_roi,
+            onDataChanged=self.existe_poligono,
+        )
+
+        self.viewer_mgr = ViewerManager()
         self.container = QWidget()
         self.main_layout = QHBoxLayout(self.container)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
         self.main_layout.setSpacing(0)
         self.setCentralWidget(self.container)
 
-        self.viewer_panel = ViewerPanel(self.viewer_model)
+        self.viewer_panel = ViewerPanel(self.viewer_mgr.model)
         self.toolbar = AppToolbar(parent=self)
         self.addToolBar(self.toolbar)
         self.status_mgr = StatusBarManager(self.statusBar())
@@ -76,6 +81,14 @@ class MainWindow(QMainWindow):
         exito, self.model, msg = cargar_recargar_modelo()
         self.modelo_cargado = exito
         self.status_mgr.show_message(msg, TIMEOUT_LONG if exito else TIMEOUT_MEDIUM)
+
+    def _on_viewer_roi(self, action: str, mode: str = None, initial_data=None):
+        if action == "activar":
+            self.viewer_mgr.activar_capa('ROI', mode, initial_data)
+        elif action == "desactivar":
+            self.viewer_mgr.desactivar_capa('ROI')
+        elif action == "limpiar":
+            self.viewer_mgr.limpiar_capa('ROI')
 
     def toggle_check_roi(self, is_active: bool, mode: str = "pan_zoom") -> None:
         self.toolbar.set_roi_opt_checked(is_active, option=mode)
@@ -177,18 +190,26 @@ class MainWindow(QMainWindow):
             print(f"Error UI: {e}", flush=True)
 
     def finalizar_carga_img(self, img_data) -> None:
-        self.viewer_model.add_image(img_data, name="Preview", contrast_limits=[0, 1])
-        self.status_mgr.show_message(S.MSG_IMAGEN_CARGADA, TIMEOUT_LONG)
-        self.viewer_model.reset_view()
-        self.archivo_cargado = True
-        self.viewer_panel.show_viewer()
-        self.toolbar.set_config_enabled(True)
-        self.toolbar.set_all_enabled(True)
-        #el roi esta en falso
-        print("Nueva imagen cargada correctamente.")
-
+        try:
+            self.roi_manager.loader = self.loader
+            self.viewer_mgr.model.add_image(img_data, name="Preview", contrast_limits=[0, 1])
+            self.viewer_mgr.preparar_capa('ROI',(ROI_EDGE_COLOR, ROI_FACE_COLOR, ROI_EDGE_WIDTH),
+                                        on_data_changed= self.roi_manager._on_data_changed)
+            self.viewer_mgr.model.reset_view()
+            self.status_mgr.show_message(S.MSG_IMAGEN_CARGADA, TIMEOUT_LONG)
+            self.archivo_cargado = True
+            self.viewer_panel.show_viewer()
+            print("Nueva imagen cargada correctamente.")
+        except Exception as e:
+            QMessageBox.warning(self, "Imagen inválida", f"{e}")
+            print(f"Error al añadir la imagen: {e}", flush = True)
+            return
+        finally:
+            self.toolbar.ready_ui(True)
+            self.status_mgr.hide_progress()
+        
     def limpiar_visor(self) -> None:
-        self.viewer_model.layers.clear()
+        self.viewer_mgr.model.layers.clear()
         self.roi_manager.limpiar()
         self.last_buildings_gpkg_path = None
         self.last_prediction_output_dir = None
@@ -205,7 +226,7 @@ class MainWindow(QMainWindow):
                 self.settings()
                 return
 
-            has_roi = self.roi_manager.tiene_datos()
+            has_roi = self.viewer_mgr.tiene_datos('ROI')
             area = self.roi_manager.area_km2 if has_roi else self.loader.get_image_area_km2()
             analyze_dlg = AnalyzeDialog(
                 self, 
@@ -345,7 +366,7 @@ class MainWindow(QMainWindow):
             kwargs["face_color"] = shape_data["face_color"]
         if "edge_color" in shape_data:
             kwargs["edge_color"] = shape_data["edge_color"]
-        self.viewer_model.add_shapes(shape_data.get("data", []), **kwargs)
+        self.viewer_mgr.model.add_shapes(shape_data.get("data", []), **kwargs)
 
     def _mostrar_resultado_analisis(self, result_payload: object) -> None:
         if isinstance(result_payload, dict) and "shape" in result_payload:
@@ -399,14 +420,21 @@ class MainWindow(QMainWindow):
             self.status_mgr.hide_progress()
 
     def reset(self) -> None:
-        ok = QMessageBox.question(
-            self,
+        msg_box = QMessageBox(
+            QMessageBox.Icon.Question,
             "Confirmar Reset",
             S.MSG_RESET,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            self
         )
-        if ok == QMessageBox.StandardButton.Yes:
-            self.roi_manager.limpiar()
+
+        # Set custom text for specific buttons
+        msg_box.setButtonText(QMessageBox.StandardButton.Yes, "Reiniciar")
+        msg_box.setButtonText(QMessageBox.StandardButton.No, "Cancelar")
+        ok = msg_box.exec()
+        if not ok:
+            return
+        self.roi_manager.limpiar()
 
     def settings(self) -> None:
         dialog = SettingsDialog(self)

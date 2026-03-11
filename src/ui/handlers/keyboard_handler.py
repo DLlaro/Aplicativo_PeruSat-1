@@ -30,12 +30,13 @@ class KeyboardHandler:
     
     def _on_enter_pressed(self):
         roi = self.mw.roi_manager
+        viewer = self.mw.viewer_mgr
 
         if not roi.isActivated:
             return
         
         # transfiere responsabilidad al Manager
-        coords = roi.on_polygon_confirm(self.mw.loader.scale_factor)
+        roi.polygon_coords = viewer.on_polygon_confirm() / self.mw.loader.scaled_factor
 
-        if coords is None:
+        if roi.polygon_coords is None:
             self.mw.statusBar().showMessage("ROI inválido: Se requieren al menos 3 puntos.", 2000)
